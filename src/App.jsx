@@ -147,7 +147,9 @@ function normalizeItem(raw) {
 }
 
 const STORAGE_KEY = "moved-app:events";
+const STORAGE_BACKUP_KEY = "moved-app:events:backup";
 const PRESET_KEY = "moved-app:presets";
+const PRESET_BACKUP_KEY = "moved-app:presets:backup";
 
 // ---------- 오늘 기준 할 일 목록 계산 ----------
 function buildTodos(items, today) {
@@ -208,37 +210,89 @@ export default function App() {
   const [calendarDate, setCalendarDate] = useState(null);
   const [modal, setModal] = useState(null); // null | {mode:'new'} | {mode:'edit', item}
   const [saveError, setSaveError] = useState(false);
+  const [loadWarning, setLoadWarning] = useState(false);
+  const itemsRef = useRef(null);
+
+  // ---- 안전한 불러오기: 메인 데이터가 손상/유실됐으면 백업 키에서 자동 복구 ----
+  const loadWithBackup = async (mainKey, backupKey) => {
+    let raw = null;
+    let parsed = null;
+    try {
+      const res = await storage.get(mainKey);
+      raw = res ? res.value : null;
+    } catch (e) {
+      raw = null;
+    }
+    if (raw !== null) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        parsed = null; // 메인 데이터가 있지만 손상됨 -> 아래에서 백업으로 복구 시도
+      }
+    }
+    if (parsed === null) {
+      // 메인 키가 없거나 손상됨 -> 백업 키에서 복구 시도
+      try {
+        const backupRes = await storage.get(backupKey);
+        if (backupRes) {
+          try {
+            parsed = JSON.parse(backupRes.value);
+            if (raw !== null) setLoadWarning(true); // 메인은 손상됐지만 백업으로 복구했음을 알림
+          } catch (e) {
+            parsed = null;
+          }
+        }
+      } catch (e) {
+        // 백업도 못 읽음
+      }
+    }
+    return parsed; // 진짜 처음 사용이거나 완전히 복구 불가능하면 null
+  };
 
   useEffect(() => {
     (async () => {
-      try {
-        const res = await storage.get(STORAGE_KEY);
-        setItems(res ? JSON.parse(res.value).map(normalizeItem) : []);
-      } catch (e) {
-        setItems([]);
+      const itemsParsed = await loadWithBackup(STORAGE_KEY, STORAGE_BACKUP_KEY);
+      const loadedItems = itemsParsed ? itemsParsed.map(normalizeItem) : [];
+      setItems(loadedItems);
+      itemsRef.current = loadedItems;
+      // 정상적으로 불러온 데이터는 즉시 백업 키에도 복사해둔다 (다음 로딩 실패에 대비)
+      if (itemsParsed) {
+        try {
+          await storage.set(STORAGE_BACKUP_KEY, JSON.stringify(loadedItems));
+        } catch (e) {
+          // 백업 저장 실패는 무시 (핵심 저장이 아님)
+        }
       }
-      try {
-        const res2 = await storage.get(PRESET_KEY);
-        setPresets(res2 ? JSON.parse(res2.value) : []);
-      } catch (e) {
-        setPresets([]);
-      }
+
+      const presetsParsed = await loadWithBackup(PRESET_KEY, PRESET_BACKUP_KEY);
+      setPresets(presetsParsed || []);
     })();
   }, []);
 
   const persist = async (next) => {
     setItems(next);
+    itemsRef.current = next;
     const trySave = () => storage.set(STORAGE_KEY, JSON.stringify(next));
+    let ok = false;
     try {
       let res = await trySave();
       if (!res) res = await trySave();
-      setSaveError(!res);
+      ok = !!res;
     } catch (e) {
       try {
         const res = await trySave();
-        setSaveError(!res);
+        ok = !!res;
       } catch (e2) {
-        setSaveError(true);
+        ok = false;
+      }
+    }
+    setSaveError(!ok);
+    if (ok) {
+      // 메인 저장이 성공했을 때만 백업도 최신 상태로 갱신
+      try {
+        await storage.set(STORAGE_BACKUP_KEY, JSON.stringify(next));
+      } catch (e) {
+        // 백업 저장 실패는 무시
       }
     }
   };
@@ -246,7 +300,8 @@ export default function App() {
   const persistPresets = async (next) => {
     setPresets(next);
     try {
-      await storage.set(PRESET_KEY, JSON.stringify(next));
+      const res = await storage.set(PRESET_KEY, JSON.stringify(next));
+      if (res) await storage.set(PRESET_BACKUP_KEY, JSON.stringify(next));
     } catch (e) {
       // 프리셋 저장 실패는 조용히 무시 (핵심 데이터가 아님)
     }
@@ -264,29 +319,30 @@ export default function App() {
   const todos = buildTodos(items, today);
 
   const saveItem = (item) => {
-    const exists = items.some((it) => it.id === item.id);
-    persist(exists ? items.map((it) => (it.id === item.id ? item : it)) : [...items, item]);
+    const cur = itemsRef.current || [];
+    const exists = cur.some((it) => it.id === item.id);
+    persist(exists ? cur.map((it) => (it.id === item.id ? item : it)) : [...cur, item]);
     setModal(null);
   };
   const deleteItem = (id) => {
-    persist(items.filter((it) => it.id !== id));
+    persist((itemsRef.current || []).filter((it) => it.id !== id));
     setModal(null);
   };
   const toggleMainDone = (itemId, done) => {
-    persist(items.map((it) => (it.id === itemId ? { ...it, done } : it)));
+    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done } : it)));
   };
   const toggleReminderDone = (itemId, reminderId, done) => {
     persist(
-      items.map((it) =>
+      (itemsRef.current || []).map((it) =>
         it.id === itemId ? { ...it, reminders: it.reminders.map((r) => (r.id === reminderId ? { ...r, done } : r)) } : it
       )
     );
   };
   const togglePinned = (itemId) => {
-    persist(items.map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
+    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
   };
   const restoreItem = (itemId) => {
-    persist(items.map((it) => (it.id === itemId ? { ...it, done: false } : it)));
+    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done: false } : it)));
   };
   const savePreset = (preset) => persistPresets([...presets, preset]);
   const deletePreset = (id) => persistPresets(presets.filter((p) => p.id !== id));
@@ -368,6 +424,15 @@ export default function App() {
       {saveError && (
         <div style={styles.saveErrorBar}>
           <AlertTriangle size={14} style={{ marginRight: 6 }} /> 저장에 실패했어요. 변경사항이 기기에만 남아있을 수 있어요.
+        </div>
+      )}
+      {loadWarning && (
+        <div style={styles.loadWarningBar}>
+          <AlertTriangle size={14} style={{ marginRight: 6 }} />
+          저장된 데이터를 불러오는 데 문제가 있어 백업본으로 복구했어요. 최근 변경사항이 빠졌을 수 있어요.
+          <button onClick={() => setLoadWarning(false)} style={styles.loadWarningCloseBtn}>
+            <X size={13} color="#96691C" />
+          </button>
         </div>
       )}
 
@@ -1262,6 +1327,8 @@ const styles = {
   dot: { color: "#DCE1E6" },
   warningTag: { color: "#DC5B45", fontWeight: 700, display: "inline-flex", alignItems: "center" },
   saveErrorBar: { display: "flex", alignItems: "center", justifyContent: "center", background: "#FBEAE7", color: "#DC5B45", fontSize: 12, padding: "8px 12px", position: "sticky", bottom: 0 },
+  loadWarningBar: { display: "flex", alignItems: "center", background: "#FDF3DC", color: "#96691C", fontSize: 11.5, padding: "8px 34px 8px 12px", position: "relative" },
+  loadWarningCloseBtn: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none" },
   fab: { position: "fixed", right: 20, bottom: 28, width: 56, height: 56, borderRadius: "50%", background: "#0D9488", border: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 16px rgba(13,148,136,0.35)", zIndex: 30 },
   calNavRow: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 4px 12px" },
   calNavLeft: { display: "flex", alignItems: "center", gap: 10 },
