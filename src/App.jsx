@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CornerDownRight } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -364,7 +364,12 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
               <div style={styles.cardBody} onClick={() => onOpen(t)}>
                 <div style={styles.cardTopRow}>
                   {t.pinned && <Pin size={12} color="#0D9488" style={{ marginRight: -2 }} />}
-                  {t.kind === "reminder" && <span style={styles.itemTitleTag}>{t.itemTitle}</span>}
+                  {t.kind === "reminder" && (
+                    <span style={styles.relatedTag}>
+                      <CornerDownRight size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
+                      {t.itemTitle}
+                    </span>
+                  )}
                   <span style={{ ...styles.ddayBadge, background: isUrgent ? "#DC5B45" : "#0D9488" }}>{dday}</span>
                   {overdue > 0 && <span style={styles.overdueTag}>{overdue}일 지연</span>}
                 </div>
@@ -860,6 +865,7 @@ const styles = {
   cardBody: { flex: 1, cursor: "pointer" },
   cardTopRow: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   itemTitleTag: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
+  relatedTag: { display: "inline-flex", alignItems: "center", fontSize: 11, color: "#5B6470", fontWeight: 600, background: "#F0F2F4", padding: "3px 8px 3px 6px", borderRadius: 20 },
   ddayBadge: { fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 9px", borderRadius: 20 },
   overdueTag: { fontSize: 11, color: "#DC5B45", fontWeight: 700, marginLeft: "auto" },
   stepLabel: { fontSize: 15, fontWeight: 600, color: "#1F2937", marginTop: 6, lineHeight: 1.35 },
