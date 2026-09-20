@@ -380,7 +380,7 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
                   <span style={styles.cardTitleWrap}>
                     {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
                     <span style={styles.stepLabel}>{t.label}</span>
-                    {t.kind === "reminder" && <span style={styles.relatedParens}> (메인 {t.itemTitle})</span>}
+                    {t.kind === "reminder" && <span style={styles.relatedParens}> (메인: {t.itemTitle})</span>}
                   </span>
                   <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
                 </div>
