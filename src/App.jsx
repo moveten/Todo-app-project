@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CornerDownRight } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -116,8 +116,19 @@ function getDateWarning(iso) {
 }
 
 // ---------- 이전 버전 데이터 마이그레이션 ----------
+function normalizeReminder(r) {
+  return {
+    id: r.id,
+    days: r.days ?? r.daysBefore ?? 0,
+    direction: r.direction || "before",
+    label: r.label,
+    done: !!r.done,
+    checklist: r.checklist || [],
+  };
+}
+
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", ...raw };
+  if (raw.reminders) return { pinned: false, time: "00:00", ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -125,7 +136,7 @@ function normalizeItem(raw) {
     done: false,
     pinned: false,
     time: "00:00",
-    reminders: (raw.steps || []).map((s) => ({ id: s.id, daysBefore: s.daysBefore, label: s.label, done: !!s.done })),
+    reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
 
@@ -146,20 +157,24 @@ function buildTodos(items, today) {
         occurDate: it.date,
         pinned: !!it.pinned,
         time: it.time || "00:00",
+        hasSub: (it.reminders || []).length > 0,
         checklist: it.checklist || [],
       });
     }
     (it.reminders || []).forEach((r) => {
       if (r.done) return;
-      const occur = addDays(it.date, -r.daysBefore);
-      if (occur <= today && it.date >= today) {
+      const direction = r.direction || "before";
+      const days = r.days ?? 0;
+      const occur = direction === "after" ? addDays(it.date, days) : addDays(it.date, -days);
+      if (occur <= today) {
         todos.push({
           itemId: it.id,
           reminderId: r.id,
           kind: "reminder",
           itemTitle: it.title,
           label: r.label,
-          daysBefore: r.daysBefore,
+          days,
+          direction,
           itemDate: it.date,
           occurDate: occur,
           pinned: !!it.pinned,
@@ -338,7 +353,6 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
       {todos.map((t) => {
         const dday = dDayLabel(t.itemDate, today);
         const isUrgent = dday === "D-DAY" || (dday.startsWith("D-") && Number(dday.slice(2)) <= 3) || dday.startsWith("D+");
-        const overdue = diffDays(today, t.occurDate);
         const warning = getDateWarning(t.occurDate);
         return (
           <SwipeRow
@@ -364,18 +378,25 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
               <div style={styles.cardBody} onClick={() => onOpen(t)}>
                 <div style={styles.cardTopRow}>
                   {t.pinned && <Pin size={12} color="#0D9488" style={{ marginRight: -2 }} />}
-                  {t.kind === "reminder" && (
-                    <span style={styles.relatedTag}>
-                      <CornerDownRight size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
-                      {t.itemTitle}
-                    </span>
+                  {t.kind === "main" ? (
+                    <>
+                      <span style={styles.mainTag}>메인</span>
+                      {t.hasSub && <span style={styles.hasSubTag}>딸림 일정 있음</span>}
+                    </>
+                  ) : (
+                    <span style={styles.relatedTag}>↳ {t.itemTitle}</span>
                   )}
                   <span style={{ ...styles.ddayBadge, background: isUrgent ? "#DC5B45" : "#0D9488" }}>{dday}</span>
-                  {overdue > 0 && <span style={styles.overdueTag}>{overdue}일 지연</span>}
                 </div>
                 <div style={styles.stepLabel}>{t.label}</div>
                 <div style={styles.metaRow}>
-                  <span>{t.kind === "reminder" ? `${t.daysBefore}일 전 준비` : "본 일정 당일"}</span>
+                  {t.kind === "reminder" ? (
+                    <span style={{ ...styles.offsetTag, color: t.direction === "after" ? "#B45309" : "#5B6470" }}>
+                      {t.direction === "after" ? `D+${t.days} 후속 조치` : `D-${t.days} 준비`}
+                    </span>
+                  ) : (
+                    <span>본 일정 당일</span>
+                  )}
                   <span style={styles.dot}>·</span>
                   <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
                   {warning && (
@@ -510,7 +531,7 @@ function CalendarView({ items, today, onEdit, onRestore }) {
   const reminderDates = new Set();
   items.forEach((it) => {
     (it.reminders || []).forEach((r) => {
-      reminderDates.add(addDays(it.date, -r.daysBefore));
+      reminderDates.add(r.direction === "after" ? addDays(it.date, r.days ?? 0) : addDays(it.date, -(r.days ?? 0)));
     });
   });
 
@@ -701,7 +722,13 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
   const [checklistOpen, setChecklistOpen] = useState(!!(initialItem?.checklist && initialItem.checklist.length));
   const [reminders, setReminders] = useState(() =>
-    (initialItem?.reminders || []).map((r) => ({ id: r.id, daysBefore: r.daysBefore, label: r.label, done: r.done || false }))
+    (initialItem?.reminders || []).map((r) => ({
+      id: r.id,
+      days: r.days ?? 1,
+      direction: r.direction || "before",
+      label: r.label,
+      done: r.done || false,
+    }))
   );
   const firstInput = useRef(null);
 
@@ -712,7 +739,7 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   const updateReminder = (id, field, val) => {
     setReminders(reminders.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
   };
-  const addReminder = () => setReminders([...reminders, { id: uid(), daysBefore: 1, label: "", done: false }]);
+  const addReminder = () => setReminders([...reminders, { id: uid(), days: 1, direction: "before", label: "", done: false }]);
   const removeReminder = (id) => setReminders(reminders.filter((r) => r.id !== id));
 
   const canSave = title.trim() && date;
@@ -729,7 +756,14 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
       checklist,
       reminders: reminders
         .filter((r) => r.label.trim())
-        .map((r) => ({ id: r.id, daysBefore: Number(r.daysBefore) || 0, label: r.label.trim(), done: r.done || false, checklist: [] })),
+        .map((r) => ({
+          id: r.id,
+          days: Number(r.days) || 0,
+          direction: r.direction === "after" ? "after" : "before",
+          label: r.label.trim(),
+          done: r.done || false,
+          checklist: [],
+        })),
     });
   };
 
@@ -793,24 +827,39 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
       )}
 
       {reminders.map((r) => (
-        <div key={r.id} style={styles.stepEditRow}>
-          <input
-            type="number"
-            min="0"
-            value={r.daysBefore}
-            onChange={(e) => updateReminder(r.id, "daysBefore", e.target.value)}
-            style={styles.dayInput}
-          />
-          <span style={styles.dayInputLabel}>일 전</span>
+        <div key={r.id} style={styles.reminderBlock}>
+          <div style={styles.stepEditRow}>
+            <input
+              type="number"
+              min="0"
+              value={r.days}
+              onChange={(e) => updateReminder(r.id, "days", e.target.value)}
+              style={styles.dayInput}
+            />
+            <div style={styles.directionToggle}>
+              <button
+                onClick={() => updateReminder(r.id, "direction", "before")}
+                style={{ ...styles.directionBtn, ...(r.direction !== "after" ? styles.directionBtnActive : {}) }}
+              >
+                일 전
+              </button>
+              <button
+                onClick={() => updateReminder(r.id, "direction", "after")}
+                style={{ ...styles.directionBtn, ...(r.direction === "after" ? styles.directionBtnActiveAfter : {}) }}
+              >
+                일 후
+              </button>
+            </div>
+            <button onClick={() => removeReminder(r.id)} style={styles.stepRemoveBtn}>
+              <X size={14} color="#A8AFB8" />
+            </button>
+          </div>
           <input
             value={r.label}
             onChange={(e) => updateReminder(r.id, "label", e.target.value)}
-            placeholder="할 일"
-            style={styles.stepLabelInput}
+            placeholder={r.direction === "after" ? "후속 조치 내용" : "할 일"}
+            style={{ ...styles.stepLabelInput, width: "100%", marginTop: 6 }}
           />
-          <button onClick={() => removeReminder(r.id)} style={styles.stepRemoveBtn}>
-            <X size={14} color="#A8AFB8" />
-          </button>
         </div>
       ))}
       <button onClick={addReminder} style={styles.registerChecklistBtn}>
@@ -865,7 +914,10 @@ const styles = {
   cardBody: { flex: 1, cursor: "pointer" },
   cardTopRow: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   itemTitleTag: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
-  relatedTag: { display: "inline-flex", alignItems: "center", fontSize: 11, color: "#5B6470", fontWeight: 600, background: "#F0F2F4", padding: "3px 8px 3px 6px", borderRadius: 20 },
+  mainTag: { display: "inline-flex", alignItems: "center", fontSize: 11, color: "#fff", fontWeight: 700, background: "#7C3AED", padding: "3px 9px", borderRadius: 20 },
+  hasSubTag: { display: "inline-flex", alignItems: "center", fontSize: 11, color: "#7C3AED", fontWeight: 600, background: "#F1EBFE", padding: "3px 9px", borderRadius: 20 },
+  relatedTag: { display: "inline-flex", alignItems: "center", fontSize: 12, color: "#5B6470", fontWeight: 600 },
+  offsetTag: { fontSize: 11.5, color: "#5B6470", fontWeight: 600 },
   ddayBadge: { fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 9px", borderRadius: 20 },
   overdueTag: { fontSize: 11, color: "#DC5B45", fontWeight: 700, marginLeft: "auto" },
   stepLabel: { fontSize: 15, fontWeight: 600, color: "#1F2937", marginTop: 6, lineHeight: 1.35 },
@@ -904,6 +956,11 @@ const styles = {
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937" },
   dateWarningRow: { display: "flex", alignItems: "center", fontSize: 12, color: "#DC5B45", fontWeight: 600, marginTop: 7 },
   stepEditRow: { display: "flex", alignItems: "center", gap: 8, marginTop: 10 },
+  reminderBlock: { paddingBottom: 4, borderBottom: "1px solid #EEF1F3", marginBottom: 4 },
+  directionToggle: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 2, flex: 1 },
+  directionBtn: { flex: 1, border: "none", background: "transparent", borderRadius: 8, padding: "8px 0", fontSize: 12.5, fontWeight: 600, color: "#8A93A0" },
+  directionBtnActive: { background: "#fff", color: "#0D9488", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
+  directionBtnActiveAfter: { background: "#fff", color: "#B45309", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
   checklistMeta: { color: "#0D9488", fontWeight: 700, display: "inline-flex", alignItems: "center" },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
   checklistSectionWrap: { background: "#F7F8FA", borderRadius: 10, padding: "10px 10px", marginTop: 10 },
