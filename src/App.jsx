@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -47,6 +47,11 @@ const fmtFull = (iso) => {
   const d = new Date(iso + "T00:00:00");
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+};
+const fmtFullWithYear = (iso) => {
+  const d = new Date(iso + "T00:00:00");
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
 };
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -298,7 +303,7 @@ export default function App() {
 
       {!modal && (
         <div style={styles.header}>
-          <div style={styles.dateBig}>{fmtFull(today)}</div>
+          <div style={styles.dateBig}>{fmtFullWithYear(today)}</div>
           <div style={styles.subLabel}>{view === "list" ? `할 일 ${todos.length}건` : "달력"}</div>
           <div style={styles.tabRow}>
             <button onClick={() => setView("list")} style={{ ...styles.tabBtn, ...(view === "list" ? styles.tabBtnActive : {}) }}>
@@ -436,8 +441,8 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
                     <>
                       <span style={styles.dot}>·</span>
                       <span style={styles.checklistMeta}>
-                        <ListChecks size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
-                        {t.checklist.filter((c) => c.checked).length}/{t.checklist.length}
+                        <CheckSquare size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+                        체크리스트 있음
                       </span>
                     </>
                   )}
