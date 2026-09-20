@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -551,6 +551,7 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
   const [selected, setSelectedRaw] = useState(today);
+  const [query, setQuery] = useState("");
   const setSelected = (iso) => {
     setSelectedRaw(iso);
     onSelectDate && onSelectDate(iso);
@@ -597,6 +598,19 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
     setSelected(today);
   };
 
+  const searchResults = query.trim()
+    ? items
+        .filter((it) => it.title.toLowerCase().includes(query.trim().toLowerCase()))
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    : [];
+
+  const jumpToItem = (it) => {
+    const d = new Date(it.date + "T00:00:00");
+    setCursor({ year: d.getFullYear(), month: d.getMonth() });
+    setSelected(it.date);
+    setQuery("");
+  };
+
   const weekLabels = ["일", "월", "화", "수", "목", "금", "토"];
   const selectedWarning = getDateWarning(selected);
   const selectedItems = itemsByDate[selected] || [];
@@ -614,7 +628,37 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
         </div>
       </div>
 
-      <div style={styles.calCardWrap}>
+      <div style={styles.calSearchRow}>
+        <Search size={15} color="#9AA3AF" style={{ flexShrink: 0 }} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="일정명으로 검색 (지난 일정 포함)"
+          style={styles.calSearchInput}
+        />
+        {query && (
+          <button onClick={() => setQuery("")} style={styles.calSearchClearBtn}>
+            <X size={13} color="#8A93A0" />
+          </button>
+        )}
+      </div>
+
+      {query.trim() ? (
+        <div style={styles.calSearchResults}>
+          {searchResults.length === 0 && <div style={styles.calEmptyText}>"{query}"와 일치하는 일정이 없어요.</div>}
+          {searchResults.map((it) => (
+            <div key={it.id} style={styles.calEventBanner} onClick={() => jumpToItem(it)}>
+              <span style={{ ...styles.ddayText, fontSize: 13, color: it.done ? "#9AA3AF" : "#5B6470" }}>{fmtMD(it.date)}</span>
+              <span style={{ ...styles.calEventBannerText, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
+                {it.title}
+              </span>
+              <ChevronRight size={15} color="#A8AFB8" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          <div style={styles.calCardWrap}>
         <div style={styles.calWeekRow}>
           {weekLabels.map((w, i) => (
             <div key={w} style={{ ...styles.calWeekLabel, color: i === 0 ? "#DC5B45" : i === 6 ? "#3B82C4" : "#9AA3AF" }}>{w}</div>
@@ -706,6 +750,8 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
           );
         })}
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1113,6 +1159,10 @@ const styles = {
   calNavArrows: { display: "flex", gap: 6 },
   calNavBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" },
   calCardWrap: { background: "#FFFFFF", borderRadius: 14, padding: "10px 6px 4px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
+  calSearchRow: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 12, padding: "10px 12px", marginBottom: 12, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
+  calSearchInput: { flex: 1, border: "none", outline: "none", fontSize: 16, background: "transparent", color: "#1F2937" },
+  calSearchClearBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  calSearchResults: { display: "flex", flexDirection: "column" },
   calWeekRow: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", padding: "0 2px", marginBottom: 2 },
   calWeekLabel: { textAlign: "center", fontSize: 10.5, fontWeight: 700, padding: "4px 0" },
   calGrid: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)" },
