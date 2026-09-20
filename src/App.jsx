@@ -46,6 +46,33 @@ const fmtFull = (iso) => {
 };
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+// 모바일 키보드가 올라와도 시트가 실제 보이는 화면 크기에 맞게 조절되도록
+function useViewportSize() {
+  const [size, setSize] = useState(() => ({
+    height: typeof window !== "undefined" ? window.innerHeight : 0,
+    offsetTop: 0,
+  }));
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const update = () => {
+      if (vv) setSize({ height: vv.height, offsetTop: vv.offsetTop });
+      else setSize({ height: window.innerHeight, offsetTop: 0 });
+    };
+    update();
+    if (vv) {
+      vv.addEventListener("resize", update);
+      vv.addEventListener("scroll", update);
+      return () => {
+        vv.removeEventListener("resize", update);
+        vv.removeEventListener("scroll", update);
+      };
+    }
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return size;
+}
+
 const dDayLabel = (target, today) => {
   const diff = diffDays(target, today);
   if (diff === 0) return "D-DAY";
@@ -582,10 +609,14 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   };
 
   const warning = getDateWarning(date);
+  const viewport = useViewportSize();
 
   return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modalSheet} onClick={(e) => e.stopPropagation()}>
+    <div
+      style={{ ...styles.modalOverlay, top: viewport.offsetTop, height: viewport.height }}
+      onClick={onClose}
+    >
+      <div style={{ ...styles.modalSheet, maxHeight: viewport.height * 0.92 }} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHandle} />
         <div style={styles.modalHeaderRow}>
           <div style={styles.modalTitle}>{mode === "edit" ? "일정 수정" : "새 일정 추가"}</div>
@@ -738,7 +769,7 @@ const styles = {
   calEventBanner: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
   calEventEditBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  modalOverlay: { position: "fixed", inset: 0, background: "rgba(15,23,32,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 },
+  modalOverlay: { position: "fixed", left: 0, right: 0, top: 0, height: "100%", background: "rgba(15,23,32,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 },
   modalSheet: { width: "100%", maxWidth: 480, background: "#FFFFFF", borderRadius: "20px 20px 0 0", padding: "10px 20px 24px", maxHeight: "90%", display: "flex", flexDirection: "column", minHeight: 0 },
   modalHandle: { width: 38, height: 4, background: "#E5E9EC", borderRadius: 2, margin: "0 auto 14px" },
   modalHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexShrink: 0 },
