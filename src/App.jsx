@@ -806,6 +806,17 @@ function ChecklistEditor({ items, onChange }) {
 function ViewModal({ item, today, onClose, onEdit, onSave }) {
   const dday = dDayLabel(item.date, today);
   const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
+  const touchRef = useRef({ startY: 0, startX: 0 });
+
+  const onTouchStart = (e) => {
+    touchRef.current.startY = e.touches[0].clientY;
+    touchRef.current.startX = e.touches[0].clientX;
+  };
+  const onTouchEnd = (e) => {
+    const dy = e.changedTouches[0].clientY - touchRef.current.startY;
+    const dx = Math.abs(e.changedTouches[0].clientX - touchRef.current.startX);
+    if (dy > 90 && dx < 60) onClose();
+  };
 
   const toggleChecklistItem = (id) => {
     onSave({
@@ -815,13 +826,14 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
   };
 
   return (
-    <div style={styles.page}>
+    <div style={styles.page} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div style={styles.pageHandle} />
       <div style={styles.pageHeaderRow}>
-        <button onClick={onClose} style={styles.iconBtn}>
-          <X size={18} color="#5B6470" />
+        <button onClick={onClose} style={styles.iconBtnLarge}>
+          <X size={20} color="#5B6470" />
         </button>
         <div style={styles.modalTitle}>일정 보기</div>
-        <div style={{ width: 30 }} />
+        <div style={{ width: 40 }} />
       </div>
 
       <div style={styles.viewDdayRow}>
@@ -877,10 +889,15 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
       )}
 
       <div style={styles.pageFooterSticky}>
-        <button style={styles.doneBtn} onClick={() => onEdit(item)}>
-          <Pencil size={15} style={{ marginRight: 6 }} />
-          수정하기
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={styles.viewCloseBtn} onClick={onClose}>
+            닫기
+          </button>
+          <button style={{ ...styles.doneBtn, flex: 1 }} onClick={() => onEdit(item)}>
+            <Pencil size={15} style={{ marginRight: 6 }} />
+            수정하기
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1275,6 +1292,7 @@ const styles = {
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
   calEventEditBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   page: { display: "flex", flexDirection: "column", minHeight: "100%" },
+  pageHandle: { width: 38, height: 4, background: "#E5E9EC", borderRadius: 2, margin: "0 auto 10px" },
   viewDdayRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18 },
   viewTitleText: { fontSize: 21, fontWeight: 700, color: "#1F2937", marginTop: 8, lineHeight: 1.3 },
   viewDateText: { fontSize: 13.5, color: "#8A93A0", marginTop: 6 },
@@ -1285,6 +1303,8 @@ const styles = {
   pageHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   modalTitle: { fontSize: 18, fontWeight: 700, color: "#1F2937" },
   iconBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  iconBtnLarge: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  viewCloseBtn: { border: "1px solid #E5E9EC", background: "#fff", color: "#5B6470", fontWeight: 700, fontSize: 14, borderRadius: 12, padding: "0 20px" },
   formLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 18, marginBottom: 6 },
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937" },
   noteTextarea: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937", resize: "vertical", minHeight: 60 },
