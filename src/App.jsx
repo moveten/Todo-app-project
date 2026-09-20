@@ -352,7 +352,7 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
     <div>
       {todos.map((t) => {
         const dday = dDayLabel(t.itemDate, today);
-        const isUrgent = dday === "D-DAY" || (dday.startsWith("D-") && Number(dday.slice(2)) <= 3) || dday.startsWith("D+");
+        const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
         const warning = getDateWarning(t.occurDate);
         return (
           <SwipeRow
@@ -382,7 +382,7 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
                     <span style={styles.stepLabel}>{t.label}</span>
                     {t.kind === "reminder" && <span style={styles.relatedParens}> ({t.itemTitle})</span>}
                   </span>
-                  <span style={{ ...styles.ddayText, color: isUrgent ? "#DC5B45" : "#0D9488" }}>{dday}</span>
+                  <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
                 </div>
                 <div style={styles.metaRow}>
                   <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
@@ -627,9 +627,12 @@ function CalendarView({ items, today, onEdit, onRestore }) {
           )}
         </div>
         {selectedItems.length === 0 && <div style={styles.calEmptyText}>이 날짜에는 등록된 일정이 없어요.</div>}
-        {selectedItems.map((it) => (
+        {selectedItems.map((it) => {
+          const itDday = dDayLabel(it.date, today);
+          const itPastOrToday = itDday === "D-DAY" || itDday.startsWith("D+");
+          return (
           <div key={it.id} style={styles.calEventBanner} onClick={() => onEdit(it)}>
-            <span style={{ ...styles.ddayText, fontSize: 13, color: it.done ? "#9AA3AF" : "#0D9488" }}>{dDayLabel(it.date, today)}</span>
+            <span style={{ ...styles.ddayText, fontSize: 13, color: it.done ? "#9AA3AF" : itPastOrToday ? "#DC5B45" : "#16A34A" }}>{itDday}</span>
             <span style={{ ...styles.calEventBannerText, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
               {it.title}
             </span>
@@ -657,7 +660,8 @@ function CalendarView({ items, today, onEdit, onRestore }) {
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
