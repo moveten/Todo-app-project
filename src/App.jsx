@@ -772,6 +772,8 @@ function EventModal({ mode, initialItem, today, presets, onClose, onSave, onDele
     setAppliedPresetId(p.id);
   };
 
+  const [presetPrompt, setPresetPrompt] = useState(null); // null | { reminders, checklistToSave }
+
   const registerPreset = () => {
     const cleanReminders = reminders
       .filter((r) => r.label.trim())
@@ -782,14 +784,24 @@ function EventModal({ mode, initialItem, today, presets, onClose, onSave, onDele
     }
     const ok = window.confirm("체크리스트와 딸림 일정 구성을 프리셋으로 저장하시겠습니까?");
     if (!ok) return;
-    const name = window.prompt("프리셋 이름을 입력하세요", title || "");
-    if (!name || !name.trim()) return;
+    setPresetPrompt({
+      reminders: cleanReminders,
+      checklistToSave: checklist.filter((c) => c.text.trim()).map((c) => ({ text: c.text.trim() })),
+    });
+  };
+
+  const confirmPresetName = (name) => {
+    if (!name || !name.trim() || !presetPrompt) {
+      setPresetPrompt(null);
+      return;
+    }
     onSavePreset({
       id: uid(),
       name: name.trim(),
-      checklist: checklist.filter((c) => c.text.trim()).map((c) => ({ text: c.text.trim() })),
-      reminders: cleanReminders,
+      checklist: presetPrompt.checklistToSave,
+      reminders: presetPrompt.reminders,
     });
+    setPresetPrompt(null);
   };
 
   const hasSubNow = reminders.some((r) => r.label.trim());
@@ -979,12 +991,63 @@ function EventModal({ mode, initialItem, today, presets, onClose, onSave, onDele
           {mode === "edit" ? "수정 완료" : "일정 저장"}
         </button>
       </div>
+
+      {presetPrompt && (
+        <NamePromptModal
+          title="프리셋 이름을 입력하세요"
+          defaultValue={title}
+          onCancel={() => setPresetPrompt(null)}
+          onConfirm={confirmPresetName}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------- 이름 입력용 커스텀 프롬프트 (네이티브 prompt는 키보드 자동 표시가 안 되는 기기가 있어 자체 구현) ----------
+function NamePromptModal({ title, defaultValue, onCancel, onConfirm }) {
+  const [value, setValue] = useState(defaultValue || "");
+  const inputRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, []);
+
+  return (
+    <div style={styles.namePromptOverlay} onClick={onCancel}>
+      <div style={styles.namePromptCard} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.namePromptTitle}>{title}</div>
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onConfirm(value)}
+          style={styles.formInput}
+        />
+        <div style={styles.namePromptBtnRow}>
+          <button onClick={onCancel} style={styles.namePromptCancelBtn}>
+            취소
+          </button>
+          <button onClick={() => onConfirm(value)} style={styles.namePromptConfirmBtn}>
+            확인
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ---------- 스타일 ----------
 const styles = {
+  namePromptOverlay: { position: "fixed", inset: 0, background: "rgba(15,23,32,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 },
+  namePromptCard: { background: "#fff", borderRadius: 16, padding: "20px 18px", width: "100%", maxWidth: 320 },
+  namePromptTitle: { fontSize: 14.5, fontWeight: 700, color: "#1F2937", marginBottom: 12 },
+  namePromptBtnRow: { display: "flex", gap: 8, marginTop: 14 },
+  namePromptCancelBtn: { flex: 1, border: "none", background: "#F0F2F4", color: "#5B6470", fontWeight: 600, fontSize: 13.5, padding: "11px 0", borderRadius: 10 },
+  namePromptConfirmBtn: { flex: 1, border: "none", background: "#0D9488", color: "#fff", fontWeight: 700, fontSize: 13.5, padding: "11px 0", borderRadius: 10 },
   app: { minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", color: "#1F2937" },
   loadingWrap: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F7F8FA" },
   loadingStamp: { border: "2px solid #0D9488", color: "#0D9488", padding: "10px 22px", borderRadius: 8, fontWeight: 700, letterSpacing: 1 },
