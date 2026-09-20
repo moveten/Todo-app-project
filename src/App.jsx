@@ -1150,10 +1150,13 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
     const matches = [];
     for (const it of items || []) {
       if (initialItem && it.id === initialItem.id) continue; // 지금 수정 중인 항목 자신은 제외
-      if (!it.title.toLowerCase().includes(q)) continue;
-      if (seen.has(it.title)) continue;
-      seen.add(it.title);
-      matches.push(it);
+      const candidates = [it.title, ...(it.reminders || []).map((r) => r.label)];
+      for (const text of candidates) {
+        if (!text || !text.toLowerCase().includes(q)) continue;
+        if (seen.has(text)) continue;
+        seen.add(text);
+        matches.push({ text, date: it.date });
+      }
     }
     matches.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)); // 최근 날짜 우선
     return matches.slice(0, 5);
@@ -1295,18 +1298,18 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
         />
         {titleSuggestions.length > 0 && (
           <div style={styles.titleSuggestDropdown}>
-            {titleSuggestions.map((it) => (
+            {titleSuggestions.map((s) => (
               <div
-                key={it.id}
+                key={s.text}
                 style={styles.titleSuggestRow}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
-                  setTitle(it.title);
+                  setTitle(s.text);
                   setTitleSuggestOpen(false);
                 }}
               >
-                <span style={styles.titleSuggestText}>{it.title}</span>
-                <span style={styles.titleSuggestDate}>{fmtMD(it.date)}</span>
+                <span style={styles.titleSuggestText}>{s.text}</span>
+                <span style={styles.titleSuggestDate}>{fmtMD(s.date)}</span>
               </div>
             ))}
           </div>
