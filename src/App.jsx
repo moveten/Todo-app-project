@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -113,12 +113,14 @@ function getDateWarning(iso) {
 
 // ---------- 이전 버전 데이터 마이그레이션 ----------
 function normalizeItem(raw) {
-  if (raw.reminders) return raw;
+  if (raw.reminders) return { pinned: false, time: "00:00", ...raw };
   return {
     id: raw.id,
     title: raw.title,
     date: raw.eventDate,
     done: false,
+    pinned: false,
+    time: "00:00",
     reminders: (raw.steps || []).map((s) => ({ id: s.id, daysBefore: s.daysBefore, label: s.label, done: !!s.done })),
   };
 }
@@ -138,6 +140,8 @@ function buildTodos(items, today) {
         label: it.title,
         itemDate: it.date,
         occurDate: it.date,
+        pinned: !!it.pinned,
+        time: it.time || "00:00",
         checklist: it.checklist || [],
       });
     }
@@ -154,14 +158,18 @@ function buildTodos(items, today) {
           daysBefore: r.daysBefore,
           itemDate: it.date,
           occurDate: occur,
+          pinned: !!it.pinned,
+          time: it.time || "00:00",
           checklist: r.checklist || [],
         });
       }
     });
   });
   todos.sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (a.occurDate !== b.occurDate) return a.occurDate < b.occurDate ? -1 : 1;
-    return a.itemDate < b.itemDate ? -1 : 1;
+    if (a.itemDate !== b.itemDate) return a.itemDate < b.itemDate ? -1 : 1;
+    return (a.time || "00:00").localeCompare(b.time || "00:00");
   });
   return todos;
 }
@@ -230,6 +238,9 @@ export default function App() {
       )
     );
   };
+  const togglePinned = (itemId) => {
+    persist(items.map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
+  };
 
   return (
     <div style={styles.app}>
@@ -277,6 +288,8 @@ export default function App() {
             onToggleMain={toggleMainDone}
             onToggleReminder={toggleReminderDone}
             onOpen={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
+            onDelete={deleteItem}
+            onPin={togglePinned}
           />
         ) : (
           <CalendarView
@@ -303,7 +316,7 @@ export default function App() {
 }
 
 // ---------- 리스트 뷰 ----------
-function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen }) {
+function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDelete, onPin }) {
   if (todos.length === 0) {
     return (
       <div style={styles.emptyWrap}>
@@ -320,51 +333,150 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen }) {
         const overdue = diffDays(today, t.occurDate);
         const warning = getDateWarning(t.occurDate);
         return (
-          <div key={t.itemId + (t.reminderId || "main")} style={styles.card}>
-            <button
-              onClick={() =>
-                t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true)
-              }
-              style={styles.checkCircle}
-              aria-label="완료 처리"
-            >
-              <Check size={13} color="transparent" />
-            </button>
-            <div style={styles.cardBody} onClick={() => onOpen(t)}>
-              <div style={styles.cardTopRow}>
-                {t.kind === "reminder" && <span style={styles.itemTitleTag}>{t.itemTitle}</span>}
-                <span style={{ ...styles.ddayBadge, background: isUrgent ? "#DC5B45" : "#0D9488" }}>{dday}</span>
-                {overdue > 0 && <span style={styles.overdueTag}>{overdue}일 지연</span>}
+          <SwipeRow
+            key={t.itemId + (t.reminderId || "main")}
+            pinned={t.pinned}
+            onEdit={() => onOpen(t)}
+            onDelete={() => {
+              if (window.confirm("이 일정을 삭제할까요?")) onDelete(t.itemId);
+            }}
+            onPin={() => onPin(t.itemId)}
+          >
+            <div style={styles.card}>
+              <button
+                onClick={() => {
+                  if (!window.confirm("완료 처리하시겠습니까?")) return;
+                  t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
+                }}
+                style={styles.checkCircle}
+                aria-label="완료 처리"
+              >
+                <Check size={13} color="transparent" />
+              </button>
+              <div style={styles.cardBody} onClick={() => onOpen(t)}>
+                <div style={styles.cardTopRow}>
+                  {t.pinned && <Pin size={12} color="#0D9488" style={{ marginRight: -2 }} />}
+                  {t.kind === "reminder" && <span style={styles.itemTitleTag}>{t.itemTitle}</span>}
+                  <span style={{ ...styles.ddayBadge, background: isUrgent ? "#DC5B45" : "#0D9488" }}>{dday}</span>
+                  {overdue > 0 && <span style={styles.overdueTag}>{overdue}일 지연</span>}
+                </div>
+                <div style={styles.stepLabel}>{t.label}</div>
+                <div style={styles.metaRow}>
+                  <span>{t.kind === "reminder" ? `${t.daysBefore}일 전 준비` : "본 일정 당일"}</span>
+                  <span style={styles.dot}>·</span>
+                  <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
+                  {warning && (
+                    <>
+                      <span style={styles.dot}>·</span>
+                      <span style={styles.warningTag}>
+                        <AlertTriangle size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
+                        {warning.label}
+                      </span>
+                    </>
+                  )}
+                  {t.checklist.length > 0 && (
+                    <>
+                      <span style={styles.dot}>·</span>
+                      <span style={styles.checklistMeta}>
+                        <ListChecks size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
+                        {t.checklist.filter((c) => c.checked).length}/{t.checklist.length}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
-              <div style={styles.stepLabel}>{t.label}</div>
-              <div style={styles.metaRow}>
-                <span>{t.kind === "reminder" ? `${t.daysBefore}일 전 준비` : "본 일정 당일"}</span>
-                <span style={styles.dot}>·</span>
-                <span>{fmtMD(t.occurDate)}</span>
-                {warning && (
-                  <>
-                    <span style={styles.dot}>·</span>
-                    <span style={styles.warningTag}>
-                      <AlertTriangle size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
-                      {warning.label}
-                    </span>
-                  </>
-                )}
-                {t.checklist.length > 0 && (
-                  <>
-                    <span style={styles.dot}>·</span>
-                    <span style={styles.checklistMeta}>
-                      <ListChecks size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
-                      {t.checklist.filter((c) => c.checked).length}/{t.checklist.length}
-                    </span>
-                  </>
-                )}
-              </div>
+              <ChevronRight size={16} color="#A8AFB8" onClick={() => onOpen(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
             </div>
-            <ChevronRight size={16} color="#A8AFB8" onClick={() => onOpen(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
-          </div>
+          </SwipeRow>
         );
       })}
+    </div>
+  );
+}
+
+// ---------- 스와이프 (왼쪽: 수정/삭제, 오른쪽: 고정) ----------
+function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
+  const [x, setX] = useState(0);
+  const dragRef = useRef({ startX: 0, dragging: false, moved: false });
+  const LEFT_OPEN = -144; // 수정 + 삭제
+  const RIGHT_OPEN = 72; // 고정
+
+  const onTouchStart = (e) => {
+    dragRef.current.startX = e.touches[0].clientX;
+    dragRef.current.dragging = true;
+    dragRef.current.moved = false;
+    dragRef.current.base = x;
+  };
+  const onTouchMove = (e) => {
+    if (!dragRef.current.dragging) return;
+    const dx = e.touches[0].clientX - dragRef.current.startX;
+    if (Math.abs(dx) > 4) dragRef.current.moved = true;
+    let next = dragRef.current.base + dx;
+    if (next < LEFT_OPEN) next = LEFT_OPEN + (next - LEFT_OPEN) * 0.2;
+    if (next > RIGHT_OPEN) next = RIGHT_OPEN + (next - RIGHT_OPEN) * 0.2;
+    setX(next);
+  };
+  const onTouchEnd = () => {
+    dragRef.current.dragging = false;
+    if (x <= LEFT_OPEN / 2) setX(LEFT_OPEN);
+    else if (x >= RIGHT_OPEN / 2) setX(RIGHT_OPEN);
+    else setX(0);
+  };
+  const close = () => setX(0);
+
+  return (
+    <div style={styles.swipeWrap}>
+      <div style={styles.swipeRightActions}>
+        <button
+          onClick={() => {
+            onEdit();
+            close();
+          }}
+          style={{ ...styles.swipeActionBtn, background: "#0D9488" }}
+        >
+          <Pencil size={16} />
+          수정
+        </button>
+        <button
+          onClick={() => {
+            onDelete();
+            close();
+          }}
+          style={{ ...styles.swipeActionBtn, background: "#DC5B45" }}
+        >
+          <Trash2 size={16} />
+          삭제
+        </button>
+      </div>
+      <div style={styles.swipeLeftActions}>
+        <button
+          onClick={() => {
+            onPin();
+            close();
+          }}
+          style={styles.swipePinBtn}
+        >
+          <Pin size={18} color={pinned ? "#0D9488" : "#5B6470"} />
+        </button>
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onClickCapture={(e) => {
+          if (dragRef.current.moved) {
+            e.stopPropagation();
+            dragRef.current.moved = false;
+          }
+        }}
+        style={{
+          ...styles.swipeContent,
+          transform: `translateX(${x}px)`,
+          transition: dragRef.current.dragging ? "none" : "transform 0.2s ease",
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -550,6 +662,7 @@ function ChecklistEditor({ items, onChange }) {
 function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   const [title, setTitle] = useState(initialItem?.title || "");
   const [date, setDate] = useState(initialItem?.date || today);
+  const [time, setTime] = useState(initialItem?.time || "00:00");
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
   const [checklistOpen, setChecklistOpen] = useState(!!(initialItem?.checklist && initialItem.checklist.length));
   const [reminders, setReminders] = useState(() =>
@@ -575,7 +688,9 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
       id: initialItem?.id || uid(),
       title: title.trim(),
       date,
+      time: time || "00:00",
       done: initialItem?.done || false,
+      pinned: initialItem?.pinned || false,
       checklist,
       reminders: reminders
         .filter((r) => r.label.trim())
@@ -605,7 +720,10 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
       />
 
       <label style={styles.formLabel}>날짜</label>
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.formInput} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...styles.formInput, flex: 2 }} />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ ...styles.formInput, flex: 1 }} />
+      </div>
       {warning && (
         <div style={styles.dateWarningRow}>
           <AlertTriangle size={13} style={{ marginRight: 5 }} />
@@ -701,7 +819,13 @@ const styles = {
   emptyWrap: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "70px 20px" },
   emptyStamp: { border: "2px solid #0D9488", color: "#0D9488", padding: "8px 18px", borderRadius: 8, fontWeight: 700, letterSpacing: 1, marginBottom: 14 },
   emptyText: { fontSize: 13.5, color: "#8A93A0", textAlign: "center" },
-  card: { display: "flex", alignItems: "flex-start", background: "#FFFFFF", borderRadius: 14, padding: "14px 14px", marginBottom: 10, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", gap: 10 },
+  card: { display: "flex", alignItems: "flex-start", background: "#FFFFFF", borderRadius: 14, padding: "14px 14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", gap: 10 },
+  swipeWrap: { position: "relative", overflow: "hidden", borderRadius: 14, marginBottom: 10 },
+  swipeContent: { position: "relative", zIndex: 1, touchAction: "pan-y" },
+  swipeRightActions: { position: "absolute", inset: 0, display: "flex", justifyContent: "flex-end" },
+  swipeLeftActions: { position: "absolute", inset: 0, display: "flex", justifyContent: "flex-start" },
+  swipeActionBtn: { width: 72, border: "none", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, fontSize: 12, fontWeight: 700 },
+  swipePinBtn: { width: 72, border: "none", background: "#F0F2F4", display: "flex", alignItems: "center", justifyContent: "center" },
   checkCircle: { width: 24, height: 24, borderRadius: "50%", border: "2px solid #D7DCE1", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 },
   cardBody: { flex: 1, cursor: "pointer" },
   cardTopRow: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
