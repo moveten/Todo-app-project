@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -241,6 +241,9 @@ export default function App() {
   const togglePinned = (itemId) => {
     persist(items.map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
   };
+  const restoreItem = (itemId) => {
+    persist(items.map((it) => (it.id === itemId ? { ...it, done: false } : it)));
+  };
 
   return (
     <div style={styles.app}>
@@ -296,6 +299,7 @@ export default function App() {
             items={items}
             today={today}
             onEdit={(item) => setModal({ mode: "edit", item })}
+            onRestore={restoreItem}
           />
         )}
       </div>
@@ -482,7 +486,7 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
 }
 
 // ---------- 달력 뷰 (간단) ----------
-function CalendarView({ items, today, onEdit }) {
+function CalendarView({ items, today, onEdit, onRestore }) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date(today + "T00:00:00");
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -599,12 +603,34 @@ function CalendarView({ items, today, onEdit }) {
         </div>
         {selectedItems.length === 0 && <div style={styles.calEmptyText}>이 날짜에는 등록된 일정이 없어요.</div>}
         {selectedItems.map((it) => (
-          <div key={it.id} style={styles.calEventBanner}>
-            <span style={{ ...styles.ddayBadge, background: "#0D9488" }}>{dDayLabel(it.date, today)}</span>
-            <span style={styles.calEventBannerText}>{it.title}</span>
-            <button onClick={() => onEdit(it)} style={styles.calEventEditBtn} aria-label="일정 수정">
-              <Pencil size={13} color="#8A93A0" />
-            </button>
+          <div key={it.id} style={styles.calEventBanner} onClick={() => onEdit(it)}>
+            <span style={{ ...styles.ddayBadge, background: it.done ? "#8A93A0" : "#0D9488" }}>{dDayLabel(it.date, today)}</span>
+            <span style={{ ...styles.calEventBannerText, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
+              {it.title}
+            </span>
+            {it.done ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm("다시 할 일 목록에 넣을까요?")) onRestore(it.id);
+                }}
+                style={styles.calEventEditBtn}
+                aria-label="할 일로 복구"
+              >
+                <RotateCcw size={13} color="#0D9488" />
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(it);
+                }}
+                style={styles.calEventEditBtn}
+                aria-label="일정 수정"
+              >
+                <Pencil size={13} color="#8A93A0" />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -857,7 +883,7 @@ const styles = {
   calDayPanelTitleRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
   calDayPanelTitle: { fontSize: 13.5, fontWeight: 700, color: "#1F2937" },
   calEmptyText: { fontSize: 12.5, color: "#9AA3AF", padding: "10px 2px" },
-  calEventBanner: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
+  calEventBanner: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", cursor: "pointer" },
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
   calEventEditBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   page: { display: "flex", flexDirection: "column", minHeight: "100%" },
