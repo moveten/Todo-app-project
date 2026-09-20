@@ -468,6 +468,7 @@ export default function App() {
             today={today}
             defaultDate={modal.defaultDate}
             presets={presets}
+            items={items}
             onClose={() => setModal(null)}
             onSave={saveItem}
             onDelete={deleteItem}
@@ -1104,8 +1105,10 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
 }
 
 // ---------- 일정 추가/수정 모달 ----------
-function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, onSave, onDelete, onSavePreset, onDeletePreset }) {
+function EventModal({ mode, initialItem, today, defaultDate, presets, items, onClose, onSave, onDelete, onSavePreset, onDeletePreset }) {
   const [title, setTitle] = useState(initialItem?.title || "");
+  const [debouncedTitle, setDebouncedTitle] = useState(title);
+  const [titleSuggestOpen, setTitleSuggestOpen] = useState(false);
   const [note, setNote] = useState(initialItem?.note || "");
   const [date, setDate] = useState(initialItem?.date || defaultDate || today);
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
@@ -1133,6 +1136,28 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, o
   };
   const addReminder = () => setReminders([...reminders, { id: uid(), days: 1, direction: "before", label: "", done: false }]);
   const removeReminder = (id) => setReminders(reminders.filter((r) => r.id !== id));
+
+  // 일정명 자동완성: 타이핑 멈추고 0.15초 후에만 검색 (데이터 많아도 버벅이지 않도록)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedTitle(title), 150);
+    return () => clearTimeout(t);
+  }, [title]);
+
+  const titleSuggestions = (() => {
+    const q = debouncedTitle.trim().toLowerCase();
+    if (!q || !titleSuggestOpen) return [];
+    const seen = new Set();
+    const matches = [];
+    for (const it of items || []) {
+      if (initialItem && it.id === initialItem.id) continue; // 지금 수정 중인 항목 자신은 제외
+      if (!it.title.toLowerCase().includes(q)) continue;
+      if (seen.has(it.title)) continue;
+      seen.add(it.title);
+      matches.push(it);
+    }
+    matches.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)); // 최근 날짜 우선
+    return matches.slice(0, 5);
+  })();
 
   const applyPreset = (p) => {
     const hasExisting = checklist.length > 0 || reminders.some((r) => r.label.trim());
@@ -1255,13 +1280,38 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, o
       )}
 
       <label style={styles.formLabel}>일정명</label>
-      <input
-        ref={firstInput}
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="일정명을 입력하세요"
-        style={styles.formInput}
-      />
+      <div style={{ position: "relative" }}>
+        <input
+          ref={firstInput}
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            setTitleSuggestOpen(true);
+          }}
+          onFocus={() => setTitleSuggestOpen(true)}
+          onBlur={() => setTimeout(() => setTitleSuggestOpen(false), 120)}
+          placeholder="일정명을 입력하세요"
+          style={styles.formInput}
+        />
+        {titleSuggestions.length > 0 && (
+          <div style={styles.titleSuggestDropdown}>
+            {titleSuggestions.map((it) => (
+              <div
+                key={it.id}
+                style={styles.titleSuggestRow}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setTitle(it.title);
+                  setTitleSuggestOpen(false);
+                }}
+              >
+                <span style={styles.titleSuggestText}>{it.title}</span>
+                <span style={styles.titleSuggestDate}>{fmtMD(it.date)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <label style={styles.formLabel}>메모</label>
       <textarea
@@ -1513,6 +1563,10 @@ const styles = {
   formLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 18, marginBottom: 6 },
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937" },
   noteTextarea: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937", resize: "vertical", minHeight: 60 },
+  titleSuggestDropdown: { position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#fff", borderRadius: 10, boxShadow: "0 6px 20px rgba(15,23,42,0.15)", padding: 4, zIndex: 15, maxHeight: 230, overflowY: "auto" },
+  titleSuggestRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 10px", borderRadius: 8, cursor: "pointer" },
+  titleSuggestText: { fontSize: 14, color: "#1F2937", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  titleSuggestDate: { fontSize: 11.5, color: "#9AA3AF", flexShrink: 0 },
   dateWarningRow: { display: "flex", alignItems: "center", fontSize: 12, color: "#DC5B45", fontWeight: 600, marginTop: 7 },
   stepEditRow: { display: "flex", alignItems: "center", gap: 8, marginTop: 10 },
   reminderBlock: { paddingBottom: 4, borderBottom: "1px solid #EEF1F3", marginBottom: 4 },
