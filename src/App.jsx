@@ -198,6 +198,7 @@ export default function App() {
   const [items, setItems] = useState(null);
   const [presets, setPresets] = useState(null);
   const [view, setView] = useState("list"); // list | calendar
+  const [calendarDate, setCalendarDate] = useState(null);
   const [modal, setModal] = useState(null); // null | {mode:'new'} | {mode:'edit', item}
   const [saveError, setSaveError] = useState(false);
 
@@ -318,6 +319,7 @@ export default function App() {
             mode={modal.mode}
             initialItem={modal.item}
             today={today}
+            defaultDate={modal.defaultDate}
             presets={presets}
             onClose={() => setModal(null)}
             onSave={saveItem}
@@ -341,6 +343,7 @@ export default function App() {
             today={today}
             onEdit={(item) => setModal({ mode: "edit", item })}
             onRestore={restoreItem}
+            onSelectDate={setCalendarDate}
           />
         )}
       </div>
@@ -352,7 +355,11 @@ export default function App() {
       )}
 
       {!modal && (
-        <button onClick={() => setModal({ mode: "new" })} style={styles.fab} aria-label="일정 추가">
+        <button
+          onClick={() => setModal({ mode: "new", defaultDate: view === "calendar" ? calendarDate || today : today })}
+          style={styles.fab}
+          aria-label="일정 추가"
+        >
           <Plus size={24} color="#fff" />
         </button>
       )}
@@ -533,12 +540,21 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
 }
 
 // ---------- 달력 뷰 (간단) ----------
-function CalendarView({ items, today, onEdit, onRestore }) {
+function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date(today + "T00:00:00");
     return { year: d.getFullYear(), month: d.getMonth() };
   });
-  const [selected, setSelected] = useState(today);
+  const [selected, setSelectedRaw] = useState(today);
+  const setSelected = (iso) => {
+    setSelectedRaw(iso);
+    onSelectDate && onSelectDate(iso);
+  };
+
+  useEffect(() => {
+    onSelectDate && onSelectDate(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const itemsByDate = {};
   items.forEach((it) => {
@@ -736,9 +752,9 @@ function ChecklistEditor({ items, onChange }) {
 }
 
 // ---------- 일정 추가/수정 모달 ----------
-function EventModal({ mode, initialItem, today, presets, onClose, onSave, onDelete, onSavePreset, onDeletePreset }) {
+function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, onSave, onDelete, onSavePreset, onDeletePreset }) {
   const [title, setTitle] = useState(initialItem?.title || "");
-  const [date, setDate] = useState(initialItem?.date || today);
+  const [date, setDate] = useState(initialItem?.date || defaultDate || today);
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
   const [checklistOpen, setChecklistOpen] = useState(!!(initialItem?.checklist && initialItem.checklist.length));
