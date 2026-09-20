@@ -557,6 +557,13 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   );
   const firstInput = useRef(null);
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      firstInput.current && firstInput.current.focus();
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
+
   const updateReminder = (id, field, val) => {
     setReminders(reminders.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
   };
