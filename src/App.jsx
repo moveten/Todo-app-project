@@ -235,8 +235,9 @@ export default function App() {
     <div style={styles.app}>
       <style>{`
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
+        html, body { margin: 0; overflow-x: hidden; }
         button { cursor: pointer; font-family: inherit; }
-        input, textarea { font-family: inherit; }
+        input, textarea { font-family: inherit; max-width: 100%; }
         ::placeholder { color: #A8AFB8; }
         .scrollbox::-webkit-scrollbar { width: 6px; }
         .scrollbox::-webkit-scrollbar-thumb { background: #DDE2E7; border-radius: 3px; }
@@ -556,10 +557,6 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   );
   const firstInput = useRef(null);
 
-  useEffect(() => {
-    firstInput.current && firstInput.current.focus();
-  }, []);
-
   const updateReminder = (id, field, val) => {
     setReminders(reminders.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
   };
@@ -696,7 +693,7 @@ const styles = {
   tabRow: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 3, gap: 2, marginBottom: 0 },
   tabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 0", borderRadius: 8, border: "none", background: "transparent", color: "#8A93A0", fontSize: 13.5, fontWeight: 600 },
   tabBtnActive: { background: "#FFFFFF", color: "#0D9488", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
-  body: { flex: 1, padding: "18px 16px 100px", overflowY: "auto", background: "#F7F8FA" },
+  body: { flex: 1, padding: "18px 16px 100px", background: "#F7F8FA" },
   emptyWrap: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "70px 20px" },
   emptyStamp: { border: "2px solid #0D9488", color: "#0D9488", padding: "8px 18px", borderRadius: 8, fontWeight: 700, letterSpacing: 1, marginBottom: 14 },
   emptyText: { fontSize: 13.5, color: "#8A93A0", textAlign: "center" },
