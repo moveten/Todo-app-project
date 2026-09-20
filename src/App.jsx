@@ -321,7 +321,15 @@ export default function App() {
       )}
 
       <div style={styles.body} className="scrollbox">
-        {modal ? (
+        {modal && modal.mode === "view" ? (
+          <ViewModal
+            item={modal.item}
+            today={today}
+            onClose={() => setModal(null)}
+            onEdit={(item) => setModal({ mode: "edit", item })}
+            onSave={saveItem}
+          />
+        ) : modal ? (
           <EventModal
             mode={modal.mode}
             initialItem={modal.item}
@@ -340,7 +348,8 @@ export default function App() {
             today={today}
             onToggleMain={toggleMainDone}
             onToggleReminder={toggleReminderDone}
-            onOpen={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
+            onView={(t) => setModal({ mode: "view", item: items.find((it) => it.id === t.itemId) })}
+            onEdit={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
             onDelete={deleteItem}
             onPin={togglePinned}
           />
@@ -348,6 +357,7 @@ export default function App() {
           <CalendarView
             items={items}
             today={today}
+            onView={(item) => setModal({ mode: "view", item })}
             onEdit={(item) => setModal({ mode: "edit", item })}
             onRestore={restoreItem}
             onSelectDate={setCalendarDate}
@@ -375,7 +385,7 @@ export default function App() {
 }
 
 // ---------- 리스트 뷰 ----------
-function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDelete, onPin }) {
+function ListView({ todos, today, onToggleMain, onToggleReminder, onView, onEdit, onDelete, onPin }) {
   if (todos.length === 0) {
     return (
       <div style={styles.emptyWrap}>
@@ -394,7 +404,7 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
           <SwipeRow
             key={t.itemId + (t.reminderId || "main")}
             pinned={t.pinned}
-            onEdit={() => onOpen(t)}
+            onEdit={() => onEdit(t)}
             onDelete={() => {
               if (window.confirm("이 일정을 삭제할까요?")) onDelete(t.itemId);
             }}
@@ -411,7 +421,7 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
               >
                 <Check size={13} color="transparent" />
               </button>
-              <div style={styles.cardBody} onClick={() => onOpen(t)}>
+              <div style={styles.cardBody} onClick={() => onView(t)}>
                 <div style={styles.cardLine1}>
                   <span style={styles.cardTitleWrap}>
                     {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
@@ -459,7 +469,7 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
                   )}
                 </div>
               </div>
-              <ChevronRight size={16} color="#A8AFB8" onClick={() => onOpen(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
+              <ChevronRight size={16} color="#A8AFB8" onClick={() => onView(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
             </div>
           </SwipeRow>
         );
@@ -556,7 +566,7 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
 }
 
 // ---------- 달력 뷰 (간단) ----------
-function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
+function CalendarView({ items, today, onView, onEdit, onRestore, onSelectDate }) {
   const [cursor, setCursor] = useState(() => {
     const d = new Date(today + "T00:00:00");
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -617,7 +627,7 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
 
   const selectSearchResult = (it) => {
     setQuery("");
-    onEdit(it);
+    onView(it);
   };
 
   const weekLabels = ["일", "월", "화", "수", "목", "금", "토"];
@@ -728,7 +738,7 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
           const itDday = dDayLabel(it.date, today);
           const itPastOrToday = itDday === "D-DAY" || itDday.startsWith("D+");
           return (
-          <div key={it.id} style={styles.calEventBanner} onClick={() => onEdit(it)}>
+          <div key={it.id} style={styles.calEventBanner} onClick={() => onView(it)}>
             <span style={{ ...styles.ddayText, fontSize: 13, color: it.done ? "#9AA3AF" : itPastOrToday ? "#DC5B45" : "#16A34A" }}>{itDday}</span>
             <span style={{ ...styles.calEventBannerText, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
               {it.title}
@@ -804,6 +814,97 @@ function ChecklistEditor({ items, onChange }) {
         />
         <button onClick={add} style={styles.checklistAddBtn}>
           <Plus size={14} color="#fff" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- 일정 상세 보기 (읽기 전용 + 체크리스트 체크는 가능) ----------
+function ViewModal({ item, today, onClose, onEdit, onSave }) {
+  const dday = dDayLabel(item.date, today);
+  const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
+  const warning = getDateWarning(item.date);
+
+  const toggleChecklistItem = (id) => {
+    onSave({
+      ...item,
+      checklist: (item.checklist || []).map((c) => (c.id === id ? { ...c, checked: !c.checked } : c)),
+    });
+  };
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.pageHeaderRow}>
+        <button onClick={onClose} style={styles.iconBtn}>
+          <X size={18} color="#5B6470" />
+        </button>
+        <div style={styles.modalTitle}>일정 보기</div>
+        <div style={{ width: 30 }} />
+      </div>
+
+      <div style={styles.viewDdayRow}>
+        <span style={{ ...styles.ddayText, fontSize: 16, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
+        {item.pinned && <Pin size={14} color="#8A93A0" />}
+      </div>
+      <div style={styles.viewTitleText}>{item.title}</div>
+      <div style={styles.viewDateText}>
+        {fmtFull(item.date)}
+        {item.time && item.time !== "00:00" ? ` ${item.time}` : ""}
+      </div>
+      {warning && (
+        <div style={styles.dateWarningRow}>
+          <AlertTriangle size={13} style={{ marginRight: 5 }} />
+          이 날짜는 {warning.label}이에요.
+        </div>
+      )}
+
+      {item.note && item.note.trim() && (
+        <div style={styles.viewSection}>
+          <div style={styles.viewSectionLabel}>메모</div>
+          <div style={styles.viewNoteText}>{item.note}</div>
+        </div>
+      )}
+
+      {item.checklist && item.checklist.length > 0 && (
+        <div style={styles.viewSection}>
+          <div style={styles.viewSectionLabel}>체크리스트</div>
+          {item.checklist.map((c) => (
+            <div key={c.id} style={styles.checklistEditorRow} onClick={() => toggleChecklistItem(c.id)}>
+              <button
+                style={{ ...styles.checkCircleSmall, background: c.checked ? "#0D9488" : "#fff", borderColor: c.checked ? "#0D9488" : "#D7DCE1" }}
+              >
+                {c.checked && <Check size={11} color="#fff" />}
+              </button>
+              <span style={{ ...styles.checklistEditorText, textDecoration: c.checked ? "line-through" : "none", color: c.checked ? "#9AA3AF" : "#1F2937" }}>
+                {c.text}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {item.reminders && item.reminders.length > 0 && (
+        <div style={styles.viewSection}>
+          <div style={styles.viewSectionLabel}>딸림 일정</div>
+          {item.reminders.map((r) => (
+            <div key={r.id} style={styles.viewReminderRow}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: r.direction === "after" ? "#B45309" : "#5B6470", flexShrink: 0 }}>
+                {r.direction === "after" ? `D+${r.days}` : `D-${r.days}`}
+              </span>
+              <span style={{ flex: 1, fontSize: 14, textDecoration: r.done ? "line-through" : "none", color: r.done ? "#9AA3AF" : "#1F2937" }}>
+                {r.label}
+              </span>
+              {r.done && <Check size={14} color="#0D9488" />}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={styles.pageFooterSticky}>
+        <button style={styles.doneBtn} onClick={() => onEdit(item)}>
+          <Pencil size={15} style={{ marginRight: 6 }} />
+          수정하기
         </button>
       </div>
     </div>
@@ -1199,6 +1300,13 @@ const styles = {
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
   calEventEditBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   page: { display: "flex", flexDirection: "column", minHeight: "100%" },
+  viewDdayRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18 },
+  viewTitleText: { fontSize: 21, fontWeight: 700, color: "#1F2937", marginTop: 8, lineHeight: 1.3 },
+  viewDateText: { fontSize: 13.5, color: "#8A93A0", marginTop: 6 },
+  viewSection: { marginTop: 22 },
+  viewSectionLabel: { fontSize: 12, fontWeight: 700, color: "#8A93A0", marginBottom: 8 },
+  viewNoteText: { fontSize: 14.5, color: "#1F2937", lineHeight: 1.55, background: "#F7F8FA", borderRadius: 10, padding: "12px 14px", whiteSpace: "pre-wrap" },
+  viewReminderRow: { display: "flex", alignItems: "center", gap: 10, padding: "9px 2px", borderBottom: "1px solid #F0F2F4" },
   pageHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   modalTitle: { fontSize: 18, fontWeight: 700, color: "#1F2937" },
   iconBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
