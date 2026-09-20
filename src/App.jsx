@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, FileText } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, FileText, Download, Upload, ShieldCheck } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -150,6 +150,8 @@ const STORAGE_KEY = "moved-app:events";
 const STORAGE_BACKUP_KEY = "moved-app:events:backup";
 const PRESET_KEY = "moved-app:presets";
 const PRESET_BACKUP_KEY = "moved-app:presets:backup";
+const LAST_BACKUP_KEY = "moved-app:last-backup-at";
+const BACKUP_REMINDER_DAYS = 7;
 
 // ---------- 오늘 기준 할 일 목록 계산 ----------
 function buildTodos(items, today) {
@@ -211,6 +213,7 @@ export default function App() {
   const [modal, setModal] = useState(null); // null | {mode:'new'} | {mode:'edit', item}
   const [saveError, setSaveError] = useState(false);
   const [loadWarning, setLoadWarning] = useState(false);
+  const [lastBackupAt, setLastBackupAt] = useState(null);
   const itemsRef = useRef(null);
 
   // ---- 안전한 불러오기: 메인 데이터가 손상/유실됐으면 백업 키에서 자동 복구 ----
@@ -266,6 +269,13 @@ export default function App() {
 
       const presetsParsed = await loadWithBackup(PRESET_KEY, PRESET_BACKUP_KEY);
       setPresets(presetsParsed || []);
+
+      try {
+        const res3 = await storage.get(LAST_BACKUP_KEY);
+        setLastBackupAt(res3 ? res3.value : null);
+      } catch (e) {
+        setLastBackupAt(null);
+      }
     })();
   }, []);
 
@@ -307,6 +317,53 @@ export default function App() {
     }
   };
 
+  const exportBackup = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      items: itemsRef.current || [],
+      presets: presets || [],
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = todayISO().replace(/-/g, "");
+    a.href = url;
+    a.download = `일정관리-백업-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const now = new Date().toISOString();
+    setLastBackupAt(now);
+    storage.set(LAST_BACKUP_KEY, now).catch(() => {});
+  };
+
+  const importBackup = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        const importedItems = Array.isArray(data.items) ? data.items.map(normalizeItem) : null;
+        const importedPresets = Array.isArray(data.presets) ? data.presets : null;
+        if (!importedItems) {
+          window.alert("올바른 백업 파일이 아니에요.");
+          return;
+        }
+        const ok = window.confirm(
+          `이 백업 파일(${importedItems.length}개 일정)로 지금 데이터를 덮어쓸까요? 현재 데이터는 사라져요.`
+        );
+        if (!ok) return;
+        persist(importedItems);
+        if (importedPresets) persistPresets(importedPresets);
+        window.alert("백업 파일을 불러왔어요.");
+      } catch (err) {
+        window.alert("백업 파일을 읽는 데 실패했어요.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   if (items === null || presets === null) {
     return (
       <div style={styles.loadingWrap}>
@@ -317,6 +374,9 @@ export default function App() {
 
   const today = todayISO();
   const todos = buildTodos(items, today);
+  const backupOverdue =
+    items.length > 0 &&
+    (!lastBackupAt || diffDays(today, lastBackupAt.slice(0, 10)) >= BACKUP_REMINDER_DAYS);
 
   const saveItem = (item) => {
     const cur = itemsRef.current || [];
@@ -361,8 +421,16 @@ export default function App() {
 
       {!modal && (
         <div style={styles.header}>
-          <div style={styles.dateBig}>{fmtFullWithYear(today)}</div>
-          <div style={styles.subLabel}>{view === "list" ? `할 일 ${todos.length}건` : "달력"}</div>
+          <div style={styles.headerTopRow}>
+            <div>
+              <div style={styles.dateBig}>{fmtFullWithYear(today)}</div>
+              <div style={styles.subLabel}>{view === "list" ? `할 일 ${todos.length}건` : "달력"}</div>
+            </div>
+            <button onClick={() => setModal({ mode: "backup" })} style={styles.headerBackupBtn} aria-label="백업">
+              <ShieldCheck size={18} color="#5B6470" />
+              {backupOverdue && <span style={styles.headerBackupDot} />}
+            </button>
+          </div>
           <div style={styles.tabRow}>
             <button onClick={() => setView("list")} style={{ ...styles.tabBtn, ...(view === "list" ? styles.tabBtnActive : {}) }}>
               <LayoutList size={15} style={{ marginRight: 6 }} />
@@ -377,7 +445,15 @@ export default function App() {
       )}
 
       <div style={styles.body} className="scrollbox">
-        {modal && modal.mode === "view" ? (
+        {modal && modal.mode === "backup" ? (
+          <BackupScreen
+            lastBackupAt={lastBackupAt}
+            itemCount={items.length}
+            onClose={() => setModal(null)}
+            onExport={exportBackup}
+            onImport={importBackup}
+          />
+        ) : modal && modal.mode === "view" ? (
           <ViewModal
             item={modal.item}
             today={today}
@@ -868,6 +944,65 @@ function ChecklistEditor({ items, onChange }) {
 }
 
 // ---------- 일정 상세 보기 (읽기 전용 + 체크리스트 체크는 가능) ----------
+// ---------- 백업 관리 화면 ----------
+function BackupScreen({ lastBackupAt, itemCount, onClose, onExport, onImport }) {
+  const fileInputRef = useRef(null);
+  const lastBackupText = lastBackupAt
+    ? fmtFull(lastBackupAt.slice(0, 10)) + ` ${lastBackupAt.slice(11, 16)}`
+    : "아직 백업한 적 없어요";
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.pageHeaderRow}>
+        <button onClick={onClose} style={styles.iconBtnLarge}>
+          <X size={20} color="#5B6470" />
+        </button>
+        <div style={styles.modalTitle}>백업 관리</div>
+        <div style={{ width: 40 }} />
+      </div>
+
+      <div style={styles.viewSection}>
+        <div style={styles.viewSectionLabel}>마지막 백업</div>
+        <div style={styles.viewNoteText}>{lastBackupText}</div>
+      </div>
+
+      <div style={styles.viewSection}>
+        <div style={styles.viewSectionLabel}>백업 파일 만들기</div>
+        <div style={{ fontSize: 12.5, color: "#8A93A0", marginBottom: 10, lineHeight: 1.5 }}>
+          현재 일정 {itemCount}개를 파일로 저장해요. 만들어진 파일은 아이폰의 "파일" 앱이나 아이클라우드에 보관해두면, 브라우저 저장공간에 문제가 생겨도 이 파일로 복구할 수 있어요.
+        </div>
+        <button onClick={onExport} style={styles.registerPresetBtn}>
+          <Download size={14} style={{ marginRight: 6 }} />
+          지금 백업 파일 만들기
+        </button>
+      </div>
+
+      <div style={styles.viewSection}>
+        <div style={styles.viewSectionLabel}>백업 파일 불러오기</div>
+        <div style={{ fontSize: 12.5, color: "#8A93A0", marginBottom: 10, lineHeight: 1.5 }}>
+          이전에 만들어둔 백업 파일을 선택하면 지금 데이터를 그 내용으로 되돌려요. (현재 데이터는 사라져요)
+        </div>
+        <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={styles.registerChecklistBtn}>
+          <Upload size={14} style={{ marginRight: 6 }} />
+          백업 파일 선택해서 불러오기
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files && e.target.files[0];
+            if (file) onImport(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+
 function ViewModal({ item, today, onClose, onEdit, onSave }) {
   const dday = dDayLabel(item.date, today);
   const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
@@ -1300,6 +1435,9 @@ const styles = {
   loadingWrap: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F7F8FA" },
   loadingStamp: { border: "2px solid #0D9488", color: "#0D9488", padding: "10px 22px", borderRadius: 8, fontWeight: 700, letterSpacing: 1 },
   header: { padding: "20px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
+  headerTopRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between" },
+  headerBackupBtn: { position: "relative", background: "#F0F2F4", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  headerBackupDot: { position: "absolute", top: 4, right: 5, width: 8, height: 8, borderRadius: "50%", background: "#DC5B45", border: "1.5px solid #fff" },
   dateBig: { fontSize: 21, fontWeight: 700, color: "#1F2937" },
   subLabel: { fontSize: 12.5, color: "#8A93A0", marginTop: 3, marginBottom: 16 },
   tabRow: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 3, gap: 2, marginBottom: 0 },
