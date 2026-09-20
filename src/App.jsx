@@ -615,11 +615,9 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
         .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
     : [];
 
-  const jumpToItem = (it) => {
-    const d = new Date(it.date + "T00:00:00");
-    setCursor({ year: d.getFullYear(), month: d.getMonth() });
-    setSelected(it.date);
+  const selectSearchResult = (it) => {
     setQuery("");
+    onEdit(it);
   };
 
   const weekLabels = ["일", "월", "화", "수", "목", "금", "토"];
@@ -639,37 +637,38 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
         </div>
       </div>
 
-      <div style={styles.calSearchRow}>
-        <Search size={15} color="#9AA3AF" style={{ flexShrink: 0 }} />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="일정명으로 검색 (지난 일정 포함)"
-          style={styles.calSearchInput}
-        />
-        {query && (
-          <button onClick={() => setQuery("")} style={styles.calSearchClearBtn}>
-            <X size={13} color="#8A93A0" />
-          </button>
+      <div style={styles.calSearchWrap}>
+        <div style={styles.calSearchRow}>
+          <Search size={15} color="#9AA3AF" style={{ flexShrink: 0 }} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="일정명 검색 (지난 일정 포함 전체)"
+            style={styles.calSearchInput}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} style={styles.calSearchClearBtn}>
+              <X size={13} color="#8A93A0" />
+            </button>
+          )}
+        </div>
+        {query.trim() && (
+          <div style={styles.calSearchDropdown}>
+            {searchResults.length === 0 && <div style={styles.calEmptyText}>"{query}"와 일치하는 일정이 없어요.</div>}
+            {searchResults.map((it) => (
+              <div key={it.id} style={styles.calSearchResultRow} onClick={() => selectSearchResult(it)}>
+                <span style={{ fontSize: 12.5, color: "#9AA3AF", flexShrink: 0 }}>{fmtMD(it.date)}</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
+                  {it.title}
+                </span>
+                <ChevronRight size={15} color="#A8AFB8" />
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
-      {query.trim() ? (
-        <div style={styles.calSearchResults}>
-          {searchResults.length === 0 && <div style={styles.calEmptyText}>"{query}"와 일치하는 일정이 없어요.</div>}
-          {searchResults.map((it) => (
-            <div key={it.id} style={styles.calEventBanner} onClick={() => jumpToItem(it)}>
-              <span style={{ ...styles.ddayText, fontSize: 13, color: it.done ? "#9AA3AF" : "#5B6470" }}>{fmtMD(it.date)}</span>
-              <span style={{ ...styles.calEventBannerText, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
-                {it.title}
-              </span>
-              <ChevronRight size={15} color="#A8AFB8" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <>
-          <div style={styles.calCardWrap}>
+      <div style={styles.calCardWrap}>
         <div style={styles.calWeekRow}>
           {weekLabels.map((w, i) => (
             <div key={w} style={{ ...styles.calWeekLabel, color: i === 0 ? "#DC5B45" : i === 6 ? "#3B82C4" : "#9AA3AF" }}>{w}</div>
@@ -761,8 +760,6 @@ function CalendarView({ items, today, onEdit, onRestore, onSelectDate }) {
           );
         })}
       </div>
-        </>
-      )}
     </div>
   );
 }
@@ -1180,10 +1177,12 @@ const styles = {
   calNavArrows: { display: "flex", gap: 6 },
   calNavBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" },
   calCardWrap: { background: "#FFFFFF", borderRadius: 14, padding: "10px 6px 4px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
-  calSearchRow: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 12, padding: "10px 12px", marginBottom: 12, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
+  calSearchWrap: { position: "relative", marginBottom: 12 },
+  calSearchRow: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 12, padding: "10px 12px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
   calSearchInput: { flex: 1, border: "none", outline: "none", fontSize: 16, background: "transparent", color: "#1F2937" },
   calSearchClearBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  calSearchResults: { display: "flex", flexDirection: "column" },
+  calSearchDropdown: { position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "#fff", borderRadius: 12, boxShadow: "0 6px 20px rgba(15,23,42,0.15)", padding: 6, maxHeight: 280, overflowY: "auto", zIndex: 20 },
+  calSearchResultRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 8px", borderRadius: 8, cursor: "pointer" },
   calWeekRow: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", padding: "0 2px", marginBottom: 2 },
   calWeekLabel: { textAlign: "center", fontSize: 10.5, fontWeight: 700, padding: "4px 0" },
   calGrid: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)" },
