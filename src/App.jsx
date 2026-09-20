@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, StickyNote } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -133,7 +133,7 @@ function normalizeReminder(r) {
 }
 
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", ...raw, reminders: raw.reminders.map(normalizeReminder) };
+  if (raw.reminders) return { pinned: false, time: "00:00", note: "", ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -141,6 +141,7 @@ function normalizeItem(raw) {
     done: false,
     pinned: false,
     time: "00:00",
+    note: "",
     reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
@@ -165,6 +166,7 @@ function buildTodos(items, today) {
         time: it.time || "00:00",
         hasSub: (it.reminders || []).length > 0,
         checklist: it.checklist || [],
+        note: it.note || "",
       });
     }
     (it.reminders || []).forEach((r) => {
@@ -443,6 +445,15 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
                       <span style={styles.checklistMeta}>
                         <CheckSquare size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
                         체크리스트 있음
+                      </span>
+                    </>
+                  )}
+                  {t.note && t.note.trim() && (
+                    <>
+                      <span style={styles.dot}>·</span>
+                      <span style={styles.noteMeta}>
+                        <StickyNote size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+                        메모 있음
                       </span>
                     </>
                   )}
@@ -805,6 +816,7 @@ function ChecklistEditor({ items, onChange }) {
 // ---------- 일정 추가/수정 모달 ----------
 function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, onSave, onDelete, onSavePreset, onDeletePreset }) {
   const [title, setTitle] = useState(initialItem?.title || "");
+  const [note, setNote] = useState(initialItem?.note || "");
   const [date, setDate] = useState(initialItem?.date || defaultDate || today);
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
@@ -884,6 +896,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, o
     onSave({
       id: initialItem?.id || uid(),
       title: title.trim(),
+      note: note.trim(),
       date,
       time: time || "00:00",
       done: initialItem?.done || false,
@@ -958,6 +971,14 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, o
         onChange={(e) => setTitle(e.target.value)}
         placeholder="일정명을 입력하세요"
         style={styles.formInput}
+      />
+
+      <label style={styles.formLabel}>메모</label>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="메모를 입력하세요 (선택)"
+        style={styles.noteTextarea}
       />
 
       <label style={styles.formLabel}>날짜</label>
@@ -1184,6 +1205,7 @@ const styles = {
   iconBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   formLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 18, marginBottom: 6 },
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937" },
+  noteTextarea: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937", resize: "vertical", minHeight: 60 },
   dateWarningRow: { display: "flex", alignItems: "center", fontSize: 12, color: "#DC5B45", fontWeight: 600, marginTop: 7 },
   stepEditRow: { display: "flex", alignItems: "center", gap: 8, marginTop: 10 },
   reminderBlock: { paddingBottom: 4, borderBottom: "1px solid #EEF1F3", marginBottom: 4 },
@@ -1192,6 +1214,7 @@ const styles = {
   directionBtnActive: { background: "#fff", color: "#0D9488", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
   directionBtnActiveAfter: { background: "#fff", color: "#B45309", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
   checklistMeta: { color: "#0D9488", fontWeight: 700, display: "inline-flex", alignItems: "center" },
+  noteMeta: { color: "#B45309", fontWeight: 700, display: "inline-flex", alignItems: "center" },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
   registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
   tplHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
