@@ -25,6 +25,10 @@ import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const todayISO = () => toISO(new Date());
+const nowHHMM = () => {
+  const d = new Date();
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 const addDays = (iso, days) => {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
@@ -688,7 +692,7 @@ function ChecklistEditor({ items, onChange }) {
 function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   const [title, setTitle] = useState(initialItem?.title || "");
   const [date, setDate] = useState(initialItem?.date || today);
-  const [time, setTime] = useState(initialItem?.time || "00:00");
+  const [time, setTime] = useState(initialItem?.time || nowHHMM());
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
   const [checklistOpen, setChecklistOpen] = useState(!!(initialItem?.checklist && initialItem.checklist.length));
   const [reminders, setReminders] = useState(() =>
