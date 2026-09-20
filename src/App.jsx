@@ -586,6 +586,25 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
     firstInput.current && firstInput.current.focus();
   }, []);
 
+  // 모달이 열려있는 동안 뒷배경(body) 스크롤을 막아서, 모달 안 스크롤이 배경으로 새지 않도록 함
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    const prevPosition = document.body.style.position;
+    const prevWidth = document.body.style.width;
+    const scrollY = window.scrollY;
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPosition;
+      document.body.style.top = "";
+      document.body.style.width = prevWidth;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+
   const updateReminder = (id, field, val) => {
     setReminders(reminders.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
   };
@@ -769,13 +788,13 @@ const styles = {
   calEventBanner: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
   calEventEditBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  modalOverlay: { position: "fixed", left: 0, right: 0, top: 0, height: "100%", background: "rgba(15,23,32,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 },
+  modalOverlay: { position: "fixed", left: 0, right: 0, top: 0, height: "100%", background: "rgba(15,23,32,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50, overscrollBehavior: "contain" },
   modalSheet: { width: "100%", maxWidth: 480, background: "#FFFFFF", borderRadius: "20px 20px 0 0", padding: "10px 20px 24px", maxHeight: "90%", display: "flex", flexDirection: "column", minHeight: 0 },
   modalHandle: { width: 38, height: 4, background: "#E5E9EC", borderRadius: 2, margin: "0 auto 14px" },
   modalHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexShrink: 0 },
   modalTitle: { fontSize: 18, fontWeight: 700, color: "#1F2937" },
   iconBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  modalScroll: { overflowY: "auto", marginTop: 14, paddingBottom: 6, flex: "1 1 auto", minHeight: 0, WebkitOverflowScrolling: "touch" },
+  modalScroll: { overflowY: "auto", marginTop: 14, paddingBottom: 6, flex: "1 1 auto", minHeight: 0, WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" },
   formLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 18, marginBottom: 6 },
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 14, background: "#F7F8FA", color: "#1F2937" },
   dateWarningRow: { display: "flex", alignItems: "center", fontSize: 12, color: "#DC5B45", fontWeight: 600, marginTop: 7 },
