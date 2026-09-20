@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, StickyNote } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, FileText } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -450,22 +450,16 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onView, onEdit
                     </>
                   )}
                   {t.checklist.length > 0 && (
-                    <>
-                      <span style={styles.dot}>·</span>
-                      <span style={styles.checklistMeta}>
-                        <CheckSquare size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-                        체크리스트 있음
-                      </span>
-                    </>
+                    <span style={styles.checklistMeta}>
+                      <CheckSquare size={12} style={{ marginRight: 4, verticalAlign: -2 }} />
+                      체크리스트 있음
+                    </span>
                   )}
                   {t.note && t.note.trim() && (
-                    <>
-                      <span style={styles.dot}>·</span>
-                      <span style={styles.noteMeta}>
-                        <StickyNote size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-                        메모 있음
-                      </span>
-                    </>
+                    <span style={styles.noteMeta}>
+                      <FileText size={12} style={{ marginRight: 4, verticalAlign: -2 }} />
+                      메모 있음
+                    </span>
                   )}
                 </div>
               </div>
@@ -1320,8 +1314,8 @@ const styles = {
   directionBtn: { flex: 1, border: "none", background: "transparent", borderRadius: 8, padding: "8px 0", fontSize: 12.5, fontWeight: 600, color: "#8A93A0" },
   directionBtnActive: { background: "#fff", color: "#0D9488", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
   directionBtnActiveAfter: { background: "#fff", color: "#B45309", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
-  checklistMeta: { color: "#0D9488", fontWeight: 700, display: "inline-flex", alignItems: "center" },
-  noteMeta: { color: "#B45309", fontWeight: 700, display: "inline-flex", alignItems: "center" },
+  checklistMeta: { color: "#0D9488", fontWeight: 700, display: "inline-flex", alignItems: "center", background: "#E1F5F1", padding: "4px 9px", borderRadius: 20, fontSize: 11.5 },
+  noteMeta: { color: "#2563EB", fontWeight: 700, display: "inline-flex", alignItems: "center", background: "#E8EFFD", padding: "4px 9px", borderRadius: 20, fontSize: 11.5 },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
   registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
   tplHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
