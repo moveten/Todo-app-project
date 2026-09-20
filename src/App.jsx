@@ -376,29 +376,24 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onOpen, onDele
                 <Check size={13} color="transparent" />
               </button>
               <div style={styles.cardBody} onClick={() => onOpen(t)}>
-                <div style={styles.cardTopRow}>
-                  {t.pinned && <Pin size={12} color="#0D9488" style={{ marginRight: -2 }} />}
-                  {t.kind === "main" ? (
-                    <>
-                      <span style={styles.mainTag}>메인</span>
-                      {t.hasSub && <span style={styles.hasSubTag}>딸림 일정 있음</span>}
-                    </>
-                  ) : (
-                    <span style={styles.relatedTag}>↳ {t.itemTitle}</span>
-                  )}
-                  <span style={{ ...styles.ddayBadge, background: isUrgent ? "#DC5B45" : "#0D9488" }}>{dday}</span>
+                <div style={styles.cardLine1}>
+                  <span style={styles.cardTitleWrap}>
+                    {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
+                    <span style={styles.stepLabel}>{t.label}</span>
+                    {t.kind === "reminder" && <span style={styles.relatedParens}> ({t.itemTitle})</span>}
+                  </span>
+                  <span style={{ ...styles.ddayText, color: isUrgent ? "#DC5B45" : "#0D9488" }}>{dday}</span>
                 </div>
-                <div style={styles.stepLabel}>{t.label}</div>
                 <div style={styles.metaRow}>
-                  {t.kind === "reminder" ? (
-                    <span style={{ ...styles.offsetTag, color: t.direction === "after" ? "#B45309" : "#5B6470" }}>
-                      {t.direction === "after" ? `D+${t.days} 후속 조치` : `D-${t.days} 준비`}
-                    </span>
-                  ) : (
-                    <span>본 일정 당일</span>
-                  )}
-                  <span style={styles.dot}>·</span>
                   <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
+                  {t.kind === "reminder" && (
+                    <>
+                      <span style={styles.dot}>·</span>
+                      <span style={{ color: t.direction === "after" ? "#B45309" : "#8A93A0" }}>
+                        {t.direction === "after" ? `후속 조치 D+${t.days}` : `사전 준비 D-${t.days}`}
+                      </span>
+                    </>
+                  )}
                   {warning && (
                     <>
                       <span style={styles.dot}>·</span>
@@ -634,7 +629,7 @@ function CalendarView({ items, today, onEdit, onRestore }) {
         {selectedItems.length === 0 && <div style={styles.calEmptyText}>이 날짜에는 등록된 일정이 없어요.</div>}
         {selectedItems.map((it) => (
           <div key={it.id} style={styles.calEventBanner} onClick={() => onEdit(it)}>
-            <span style={{ ...styles.ddayBadge, background: it.done ? "#8A93A0" : "#0D9488" }}>{dDayLabel(it.date, today)}</span>
+            <span style={{ ...styles.ddayText, fontSize: 13, color: it.done ? "#9AA3AF" : "#0D9488" }}>{dDayLabel(it.date, today)}</span>
             <span style={{ ...styles.calEventBannerText, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
               {it.title}
             </span>
@@ -912,16 +907,12 @@ const styles = {
   swipePinBtn: { width: 72, border: "none", background: "#F0F2F4", display: "flex", alignItems: "center", justifyContent: "center" },
   checkCircle: { width: 24, height: 24, borderRadius: "50%", border: "2px solid #D7DCE1", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 },
   cardBody: { flex: 1, cursor: "pointer" },
-  cardTopRow: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
-  itemTitleTag: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
-  mainTag: { display: "inline-flex", alignItems: "center", fontSize: 11, color: "#fff", fontWeight: 700, background: "#7C3AED", padding: "3px 9px", borderRadius: 20 },
-  hasSubTag: { display: "inline-flex", alignItems: "center", fontSize: 11, color: "#7C3AED", fontWeight: 600, background: "#F1EBFE", padding: "3px 9px", borderRadius: 20 },
-  relatedTag: { display: "inline-flex", alignItems: "center", fontSize: 12, color: "#5B6470", fontWeight: 600 },
-  offsetTag: { fontSize: 11.5, color: "#5B6470", fontWeight: 600 },
-  ddayBadge: { fontSize: 11, fontWeight: 700, color: "#fff", padding: "3px 9px", borderRadius: 20 },
-  overdueTag: { fontSize: 11, color: "#DC5B45", fontWeight: 700, marginLeft: "auto" },
-  stepLabel: { fontSize: 15, fontWeight: 600, color: "#1F2937", marginTop: 6, lineHeight: 1.35 },
-  metaRow: { fontSize: 12, color: "#9AA3AF", marginTop: 6, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 },
+  cardLine1: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
+  cardTitleWrap: { minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  relatedParens: { fontSize: 12.5, color: "#9AA3AF", fontWeight: 500 },
+  ddayText: { fontSize: 14, fontWeight: 700, flexShrink: 0 },
+  stepLabel: { fontSize: 15, fontWeight: 600, color: "#1F2937", lineHeight: 1.35 },
+  metaRow: { fontSize: 12, color: "#9AA3AF", marginTop: 5, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 },
   dot: { color: "#DCE1E6" },
   warningTag: { color: "#DC5B45", fontWeight: 700, display: "inline-flex", alignItems: "center" },
   saveErrorBar: { display: "flex", alignItems: "center", justifyContent: "center", background: "#FBEAE7", color: "#DC5B45", fontSize: 12, padding: "8px 12px", position: "sticky", bottom: 0 },
