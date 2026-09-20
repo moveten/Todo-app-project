@@ -1235,10 +1235,51 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
 
   const warning = getDateWarning(date);
 
+  const hasUnsavedChanges = () => {
+    const curChecklist = checklist.map((c) => ({ text: (c.text || "").trim(), checked: !!c.checked }));
+    const curReminders = reminders
+      .filter((r) => r.label.trim())
+      .map((r) => ({ days: Number(r.days) || 0, direction: r.direction === "after" ? "after" : "before", label: r.label.trim(), done: !!r.done }));
+    if (mode === "edit" && initialItem) {
+      const initChecklist = (initialItem.checklist || []).map((c) => ({ text: (c.text || "").trim(), checked: !!c.checked }));
+      const initReminders = (initialItem.reminders || []).map((r) => ({
+        days: r.days ?? 0,
+        direction: r.direction === "after" ? "after" : "before",
+        label: r.label,
+        done: !!r.done,
+      }));
+      return (
+        title.trim() !== (initialItem.title || "") ||
+        note.trim() !== (initialItem.note || "") ||
+        date !== initialItem.date ||
+        time !== (initialItem.time || "00:00") ||
+        JSON.stringify(curChecklist) !== JSON.stringify(initChecklist) ||
+        JSON.stringify(curReminders) !== JSON.stringify(initReminders)
+      );
+    }
+    return title.trim() !== "" || note.trim() !== "" || curChecklist.length > 0 || curReminders.length > 0;
+  };
+
+  const handleClose = () => {
+    if (hasUnsavedChanges() && !window.confirm("입력한 내용이 있어요. 취소하시겠습니까?")) return;
+    onClose();
+  };
+
+  const touchRef = useRef({ startX: 0, startY: 0 });
+  const onPageTouchStart = (e) => {
+    touchRef.current.startX = e.touches[0].clientX;
+    touchRef.current.startY = e.touches[0].clientY;
+  };
+  const onPageTouchEnd = (e) => {
+    const dx = e.changedTouches[0].clientX - touchRef.current.startX;
+    const dy = Math.abs(e.changedTouches[0].clientY - touchRef.current.startY);
+    if (dx > 90 && dy < 60) handleClose();
+  };
+
   return (
-    <div style={styles.page}>
+    <div style={styles.page} onTouchStart={onPageTouchStart} onTouchEnd={onPageTouchEnd}>
       <div style={styles.pageHeaderRow}>
-        <button onClick={onClose} style={styles.iconBtn}>
+        <button onClick={handleClose} style={styles.iconBtn}>
           <X size={18} color="#5B6470" />
         </button>
         <div style={styles.modalTitle}>{mode === "edit" ? "일정 수정" : "새 일정 추가"}</div>
