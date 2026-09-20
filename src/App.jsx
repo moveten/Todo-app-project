@@ -141,6 +141,7 @@ function normalizeItem(raw) {
 }
 
 const STORAGE_KEY = "moved-app:events";
+const PRESET_KEY = "moved-app:presets";
 
 // ---------- 오늘 기준 할 일 목록 계산 ----------
 function buildTodos(items, today) {
@@ -195,6 +196,7 @@ function buildTodos(items, today) {
 
 export default function App() {
   const [items, setItems] = useState(null);
+  const [presets, setPresets] = useState(null);
   const [view, setView] = useState("list"); // list | calendar
   const [modal, setModal] = useState(null); // null | {mode:'new'} | {mode:'edit', item}
   const [saveError, setSaveError] = useState(false);
@@ -206,6 +208,12 @@ export default function App() {
         setItems(res ? JSON.parse(res.value).map(normalizeItem) : []);
       } catch (e) {
         setItems([]);
+      }
+      try {
+        const res2 = await storage.get(PRESET_KEY);
+        setPresets(res2 ? JSON.parse(res2.value) : []);
+      } catch (e) {
+        setPresets([]);
       }
     })();
   }, []);
@@ -227,7 +235,16 @@ export default function App() {
     }
   };
 
-  if (items === null) {
+  const persistPresets = async (next) => {
+    setPresets(next);
+    try {
+      await storage.set(PRESET_KEY, JSON.stringify(next));
+    } catch (e) {
+      // 프리셋 저장 실패는 조용히 무시 (핵심 데이터가 아님)
+    }
+  };
+
+  if (items === null || presets === null) {
     return (
       <div style={styles.loadingWrap}>
         <div style={styles.loadingStamp}>준비 중</div>
@@ -263,6 +280,8 @@ export default function App() {
   const restoreItem = (itemId) => {
     persist(items.map((it) => (it.id === itemId ? { ...it, done: false } : it)));
   };
+  const savePreset = (preset) => persistPresets([...presets, preset]);
+  const deletePreset = (id) => persistPresets(presets.filter((p) => p.id !== id));
 
   return (
     <div style={styles.app}>
@@ -299,9 +318,12 @@ export default function App() {
             mode={modal.mode}
             initialItem={modal.item}
             today={today}
+            presets={presets}
             onClose={() => setModal(null)}
             onSave={saveItem}
             onDelete={deleteItem}
+            onSavePreset={savePreset}
+            onDeletePreset={deletePreset}
           />
         ) : view === "list" ? (
           <ListView
@@ -714,7 +736,7 @@ function ChecklistEditor({ items, onChange }) {
 }
 
 // ---------- 일정 추가/수정 모달 ----------
-function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
+function EventModal({ mode, initialItem, today, presets, onClose, onSave, onDelete, onSavePreset, onDeletePreset }) {
   const [title, setTitle] = useState(initialItem?.title || "");
   const [date, setDate] = useState(initialItem?.date || today);
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
@@ -729,6 +751,8 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
       done: r.done || false,
     }))
   );
+  const [managePresets, setManagePresets] = useState(false);
+  const [appliedPresetId, setAppliedPresetId] = useState(null);
   const firstInput = useRef(null);
 
   useLayoutEffect(() => {
@@ -741,6 +765,34 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   const addReminder = () => setReminders([...reminders, { id: uid(), days: 1, direction: "before", label: "", done: false }]);
   const removeReminder = (id) => setReminders(reminders.filter((r) => r.id !== id));
 
+  const applyPreset = (p) => {
+    setChecklist((p.checklist || []).map((c) => ({ id: uid(), text: c.text, checked: false })));
+    setChecklistOpen((p.checklist || []).length > 0);
+    setReminders((p.reminders || []).map((r) => ({ id: uid(), days: r.days, direction: r.direction || "before", label: r.label, done: false })));
+    setAppliedPresetId(p.id);
+  };
+
+  const registerPreset = () => {
+    const cleanReminders = reminders
+      .filter((r) => r.label.trim())
+      .map((r) => ({ days: Number(r.days) || 0, direction: r.direction === "after" ? "after" : "before", label: r.label.trim() }));
+    if (cleanReminders.length === 0) {
+      window.alert("프리셋으로 저장할 딸림 일정이 없어요.");
+      return;
+    }
+    const ok = window.confirm("체크리스트와 딸림 일정 구성을 프리셋으로 저장하시겠습니까?");
+    if (!ok) return;
+    const name = window.prompt("프리셋 이름을 입력하세요", title || "");
+    if (!name || !name.trim()) return;
+    onSavePreset({
+      id: uid(),
+      name: name.trim(),
+      checklist: checklist.filter((c) => c.text.trim()).map((c) => ({ text: c.text.trim() })),
+      reminders: cleanReminders,
+    });
+  };
+
+  const hasSubNow = reminders.some((r) => r.label.trim());
   const canSave = title.trim() && date;
 
   const save = () => {
@@ -777,6 +829,43 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
         <div style={styles.modalTitle}>{mode === "edit" ? "일정 수정" : "새 일정 추가"}</div>
         <div style={{ width: 30 }} />
       </div>
+
+      {presets.length > 0 && (
+        <div style={{ marginBottom: 4 }}>
+          <div style={styles.tplHeaderRow}>
+            <label style={{ ...styles.formLabel, marginTop: 12 }}>프리셋 불러오기</label>
+            <button onClick={() => setManagePresets(!managePresets)} style={styles.tplManageBtn}>
+              {managePresets ? "완료" : "관리"}
+            </button>
+          </div>
+          <div style={styles.tplChipRow}>
+            {presets.map((p) => (
+              <div key={p.id} style={styles.tplChipWrap}>
+                <button
+                  onClick={() => (managePresets ? null : applyPreset(p))}
+                  style={{
+                    ...styles.tplChip,
+                    borderColor: appliedPresetId === p.id ? "#1F2937" : "#E5E9EC",
+                    background: appliedPresetId === p.id ? "#1F2937" : "#fff",
+                    color: appliedPresetId === p.id ? "#fff" : "#4A4536",
+                  }}
+                >
+                  {p.name}
+                  <span style={{ opacity: 0.6, fontWeight: 500 }}> · {(p.reminders || []).length}단계</span>
+                </button>
+                {managePresets && (
+                  <button onClick={() => onDeletePreset(p.id)} style={styles.tplDeleteBtn}>
+                    <Trash2 size={12} color="#DC5B45" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {appliedPresetId && !managePresets && (
+            <div style={styles.tplHint}>프리셋 내용이 채워졌어요. 제목이나 세부 내용은 자유롭게 고쳐보세요.</div>
+          )}
+        </div>
+      )}
 
       <label style={styles.formLabel}>일정명</label>
       <input
@@ -865,6 +954,13 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
         <Plus size={14} style={{ marginRight: 6 }} />
         관련 디데이 추가
       </button>
+
+      {hasSubNow && (
+        <button onClick={registerPreset} style={styles.registerPresetBtn}>
+          <Check size={14} style={{ marginRight: 6 }} />
+          프리셋으로 저장
+        </button>
+      )}
 
       {mode === "edit" && (
         <button
@@ -958,6 +1054,14 @@ const styles = {
   directionBtnActiveAfter: { background: "#fff", color: "#B45309", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
   checklistMeta: { color: "#0D9488", fontWeight: 700, display: "inline-flex", alignItems: "center" },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
+  registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
+  tplHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  tplManageBtn: { background: "none", border: "none", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 12 },
+  tplChipRow: { display: "flex", flexWrap: "wrap", gap: 8 },
+  tplChipWrap: { display: "flex", alignItems: "center", gap: 4 },
+  tplChip: { border: "1.5px solid #E5E9EC", borderRadius: 20, padding: "7px 13px", fontSize: 12.5, fontWeight: 700 },
+  tplDeleteBtn: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  tplHint: { fontSize: 11.5, color: "#8A93A0", marginTop: 8 },
   checklistSectionWrap: { background: "#F7F8FA", borderRadius: 10, padding: "10px 10px", marginTop: 10 },
   checklistSectionHeaderRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   checklistSectionLabel: { fontSize: 11.5, fontWeight: 700, color: "#0D9488", display: "flex", alignItems: "center" },
