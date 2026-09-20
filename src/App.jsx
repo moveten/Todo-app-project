@@ -46,33 +46,6 @@ const fmtFull = (iso) => {
 };
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-// 모바일 키보드가 올라와도 시트가 실제 보이는 화면 크기에 맞게 조절되도록
-function useViewportSize() {
-  const [size, setSize] = useState(() => ({
-    height: typeof window !== "undefined" ? window.innerHeight : 0,
-    offsetTop: 0,
-  }));
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const update = () => {
-      if (vv) setSize({ height: vv.height, offsetTop: vv.offsetTop });
-      else setSize({ height: window.innerHeight, offsetTop: 0 });
-    };
-    update();
-    if (vv) {
-      vv.addEventListener("resize", update);
-      vv.addEventListener("scroll", update);
-      return () => {
-        vv.removeEventListener("resize", update);
-        vv.removeEventListener("scroll", update);
-      };
-    }
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  return size;
-}
-
 const dDayLabel = (target, today) => {
   const diff = diffDays(target, today);
   if (diff === 0) return "D-DAY";
@@ -269,23 +242,34 @@ export default function App() {
         .scrollbox::-webkit-scrollbar-thumb { background: #DDE2E7; border-radius: 3px; }
       `}</style>
 
-      <div style={styles.header}>
-        <div style={styles.dateBig}>{fmtFull(today)}</div>
-        <div style={styles.subLabel}>{view === "list" ? `할 일 ${todos.length}건` : "달력"}</div>
-        <div style={styles.tabRow}>
-          <button onClick={() => setView("list")} style={{ ...styles.tabBtn, ...(view === "list" ? styles.tabBtnActive : {}) }}>
-            <LayoutList size={15} style={{ marginRight: 6 }} />
-            리스트
-          </button>
-          <button onClick={() => setView("calendar")} style={{ ...styles.tabBtn, ...(view === "calendar" ? styles.tabBtnActive : {}) }}>
-            <CalendarDays size={15} style={{ marginRight: 6 }} />
-            달력
-          </button>
+      {!modal && (
+        <div style={styles.header}>
+          <div style={styles.dateBig}>{fmtFull(today)}</div>
+          <div style={styles.subLabel}>{view === "list" ? `할 일 ${todos.length}건` : "달력"}</div>
+          <div style={styles.tabRow}>
+            <button onClick={() => setView("list")} style={{ ...styles.tabBtn, ...(view === "list" ? styles.tabBtnActive : {}) }}>
+              <LayoutList size={15} style={{ marginRight: 6 }} />
+              리스트
+            </button>
+            <button onClick={() => setView("calendar")} style={{ ...styles.tabBtn, ...(view === "calendar" ? styles.tabBtnActive : {}) }}>
+              <CalendarDays size={15} style={{ marginRight: 6 }} />
+              달력
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div style={styles.body} className="scrollbox">
-        {view === "list" && (
+        {modal ? (
+          <EventModal
+            mode={modal.mode}
+            initialItem={modal.item}
+            today={today}
+            onClose={() => setModal(null)}
+            onSave={saveItem}
+            onDelete={deleteItem}
+          />
+        ) : view === "list" ? (
           <ListView
             todos={todos}
             today={today}
@@ -293,8 +277,7 @@ export default function App() {
             onToggleReminder={toggleReminderDone}
             onOpen={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
           />
-        )}
-        {view === "calendar" && (
+        ) : (
           <CalendarView
             items={items}
             today={today}
@@ -309,19 +292,10 @@ export default function App() {
         </div>
       )}
 
-      <button onClick={() => setModal({ mode: "new" })} style={styles.fab} aria-label="일정 추가">
-        <Plus size={24} color="#fff" />
-      </button>
-
-      {modal && (
-        <EventModal
-          mode={modal.mode}
-          initialItem={modal.item}
-          today={today}
-          onClose={() => setModal(null)}
-          onSave={saveItem}
-          onDelete={deleteItem}
-        />
+      {!modal && (
+        <button onClick={() => setModal({ mode: "new" })} style={styles.fab} aria-label="일정 추가">
+          <Plus size={24} color="#fff" />
+        </button>
       )}
     </div>
   );
@@ -586,25 +560,6 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
     firstInput.current && firstInput.current.focus();
   }, []);
 
-  // 모달이 열려있는 동안 뒷배경(body) 스크롤을 막아서, 모달 안 스크롤이 배경으로 새지 않도록 함
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    const prevPosition = document.body.style.position;
-    const prevWidth = document.body.style.width;
-    const scrollY = window.scrollY;
-    document.body.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.position = prevPosition;
-      document.body.style.top = "";
-      document.body.style.width = prevWidth;
-      window.scrollTo(0, scrollY);
-    };
-  }, []);
-
   const updateReminder = (id, field, val) => {
     setReminders(reminders.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
   };
@@ -628,111 +583,103 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   };
 
   const warning = getDateWarning(date);
-  const viewport = useViewportSize();
 
   return (
-    <div
-      style={{ ...styles.modalOverlay, top: viewport.offsetTop, height: viewport.height }}
-      onClick={onClose}
-    >
-      <div style={{ ...styles.modalSheet, maxHeight: viewport.height * 0.92 }} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalHandle} />
-        <div style={styles.modalHeaderRow}>
-          <div style={styles.modalTitle}>{mode === "edit" ? "일정 수정" : "새 일정 추가"}</div>
-          <button onClick={onClose} style={styles.iconBtn}>
-            <X size={18} color="#5B6470" />
-          </button>
+    <div style={styles.page}>
+      <div style={styles.pageHeaderRow}>
+        <button onClick={onClose} style={styles.iconBtn}>
+          <X size={18} color="#5B6470" />
+        </button>
+        <div style={styles.modalTitle}>{mode === "edit" ? "일정 수정" : "새 일정 추가"}</div>
+        <div style={{ width: 30 }} />
+      </div>
+
+      <label style={styles.formLabel}>일정명</label>
+      <input
+        ref={firstInput}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="일정명을 입력하세요"
+        style={styles.formInput}
+      />
+
+      <label style={styles.formLabel}>날짜</label>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.formInput} />
+      {warning && (
+        <div style={styles.dateWarningRow}>
+          <AlertTriangle size={13} style={{ marginRight: 5 }} />
+          이 날짜는 {warning.label}이에요.
         </div>
+      )}
 
-        <div style={styles.modalScroll} className="scrollbox">
-          <label style={styles.formLabel}>일정명</label>
-          <input
-            ref={firstInput}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="일정명을 입력하세요"
-            style={styles.formInput}
-          />
-
-          <label style={styles.formLabel}>날짜</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.formInput} />
-          {warning && (
-            <div style={styles.dateWarningRow}>
-              <AlertTriangle size={13} style={{ marginRight: 5 }} />
-              이 날짜는 {warning.label}이에요.
-            </div>
-          )}
-
-          {checklistOpen ? (
-            <div style={styles.checklistSectionWrap}>
-              <div style={styles.checklistSectionHeaderRow}>
-                <span style={styles.checklistSectionLabel}>
-                  <ListChecks size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-                  체크리스트
-                </span>
-                <button
-                  onClick={() => {
-                    setChecklist([]);
-                    setChecklistOpen(false);
-                  }}
-                  style={styles.stepNoteCloseBtn}
-                >
-                  <X size={13} color="#A8AFB8" />
-                </button>
-              </div>
-              <ChecklistEditor items={checklist} onChange={setChecklist} />
-            </div>
-          ) : (
-            <button onClick={() => setChecklistOpen(true)} style={styles.registerChecklistBtn}>
-              <Check size={14} style={{ marginRight: 6 }} />
-              체크리스트 추가
-            </button>
-          )}
-
-          {reminders.map((r) => (
-            <div key={r.id} style={styles.stepEditRow}>
-              <input
-                type="number"
-                min="0"
-                value={r.daysBefore}
-                onChange={(e) => updateReminder(r.id, "daysBefore", e.target.value)}
-                style={styles.dayInput}
-              />
-              <span style={styles.dayInputLabel}>일 전</span>
-              <input
-                value={r.label}
-                onChange={(e) => updateReminder(r.id, "label", e.target.value)}
-                placeholder="할 일"
-                style={styles.stepLabelInput}
-              />
-              <button onClick={() => removeReminder(r.id)} style={styles.stepRemoveBtn}>
-                <X size={14} color="#A8AFB8" />
-              </button>
-            </div>
-          ))}
-          <button onClick={addReminder} style={styles.registerChecklistBtn}>
-            <Plus size={14} style={{ marginRight: 6 }} />
-            관련 디데이 추가
-          </button>
-
-          {mode === "edit" && (
+      {checklistOpen ? (
+        <div style={styles.checklistSectionWrap}>
+          <div style={styles.checklistSectionHeaderRow}>
+            <span style={styles.checklistSectionLabel}>
+              <ListChecks size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+              체크리스트
+            </span>
             <button
-              style={styles.deleteTextBtn}
               onClick={() => {
-                if (window.confirm("이 일정을 삭제할까요?")) onDelete(initialItem.id);
+                setChecklist([]);
+                setChecklistOpen(false);
               }}
+              style={styles.stepNoteCloseBtn}
             >
-              <Trash2 size={13} style={{ marginRight: 5 }} />
-              일정 삭제
+              <X size={13} color="#A8AFB8" />
             </button>
-          )}
+          </div>
+          <ChecklistEditor items={checklist} onChange={setChecklist} />
         </div>
+      ) : (
+        <button onClick={() => setChecklistOpen(true)} style={styles.registerChecklistBtn}>
+          <Check size={14} style={{ marginRight: 6 }} />
+          체크리스트 추가
+        </button>
+      )}
 
-        <div style={styles.modalFooterFixed}>
-          <button style={{ ...styles.doneBtn, opacity: canSave ? 1 : 0.4 }} onClick={save} disabled={!canSave}>
-            {mode === "edit" ? "수정 완료" : "일정 저장"}
+      {reminders.map((r) => (
+        <div key={r.id} style={styles.stepEditRow}>
+          <input
+            type="number"
+            min="0"
+            value={r.daysBefore}
+            onChange={(e) => updateReminder(r.id, "daysBefore", e.target.value)}
+            style={styles.dayInput}
+          />
+          <span style={styles.dayInputLabel}>일 전</span>
+          <input
+            value={r.label}
+            onChange={(e) => updateReminder(r.id, "label", e.target.value)}
+            placeholder="할 일"
+            style={styles.stepLabelInput}
+          />
+          <button onClick={() => removeReminder(r.id)} style={styles.stepRemoveBtn}>
+            <X size={14} color="#A8AFB8" />
           </button>
         </div>
+      ))}
+      <button onClick={addReminder} style={styles.registerChecklistBtn}>
+        <Plus size={14} style={{ marginRight: 6 }} />
+        관련 디데이 추가
+      </button>
+
+      {mode === "edit" && (
+        <button
+          style={styles.deleteTextBtn}
+          onClick={() => {
+            if (window.confirm("이 일정을 삭제할까요?")) onDelete(initialItem.id);
+          }}
+        >
+          <Trash2 size={13} style={{ marginRight: 5 }} />
+          일정 삭제
+        </button>
+      )}
+
+      <div style={styles.pageFooterSticky}>
+        <button style={{ ...styles.doneBtn, opacity: canSave ? 1 : 0.4 }} onClick={save} disabled={!canSave}>
+          {mode === "edit" ? "수정 완료" : "일정 저장"}
+        </button>
       </div>
     </div>
   );
@@ -788,13 +735,10 @@ const styles = {
   calEventBanner: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
   calEventEditBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  modalOverlay: { position: "fixed", left: 0, right: 0, top: 0, height: "100%", background: "rgba(15,23,32,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50, overscrollBehavior: "contain" },
-  modalSheet: { width: "100%", maxWidth: 480, background: "#FFFFFF", borderRadius: "20px 20px 0 0", padding: "10px 20px 24px", maxHeight: "90%", display: "flex", flexDirection: "column", minHeight: 0 },
-  modalHandle: { width: 38, height: 4, background: "#E5E9EC", borderRadius: 2, margin: "0 auto 14px" },
-  modalHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexShrink: 0 },
+  page: { display: "flex", flexDirection: "column", minHeight: "100%" },
+  pageHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   modalTitle: { fontSize: 18, fontWeight: 700, color: "#1F2937" },
   iconBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  modalScroll: { overflowY: "auto", marginTop: 14, paddingBottom: 6, flex: "1 1 auto", minHeight: 0, WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" },
   formLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 18, marginBottom: 6 },
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 14, background: "#F7F8FA", color: "#1F2937" },
   dateWarningRow: { display: "flex", alignItems: "center", fontSize: 12, color: "#DC5B45", fontWeight: 600, marginTop: 7 },
@@ -816,6 +760,6 @@ const styles = {
   stepLabelInput: { flex: 1, border: "1px solid #E5E9EC", borderRadius: 10, padding: "10px 12px", fontSize: 13.5, background: "#F7F8FA" },
   stepRemoveBtn: { background: "none", border: "none", flexShrink: 0 },
   deleteTextBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "#DC5B45", fontSize: 13, fontWeight: 600, padding: "16px 0 4px", width: "100%" },
-  modalFooterFixed: { flexShrink: 0, paddingTop: 12, borderTop: "1px solid #EBEEF0", marginTop: 4 },
+  pageFooterSticky: { position: "sticky", bottom: 0, background: "#F7F8FA", paddingTop: 14, paddingBottom: 4, marginTop: 18 },
   doneBtn: { background: "#0D9488", color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 14.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" },
 };
