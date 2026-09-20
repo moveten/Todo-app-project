@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 
 // 브라우저 localStorage 기반 저장소 (Claude 아티팩트의 window.storage를 대체)
 const storage = {
@@ -557,11 +557,8 @@ function EventModal({ mode, initialItem, today, onClose, onSave, onDelete }) {
   );
   const firstInput = useRef(null);
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      firstInput.current && firstInput.current.focus();
-    }, 50);
-    return () => clearTimeout(t);
+  useLayoutEffect(() => {
+    firstInput.current && firstInput.current.focus();
   }, []);
 
   const updateReminder = (id, field, val) => {
