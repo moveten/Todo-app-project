@@ -399,7 +399,6 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onView, onEdit
       {todos.map((t) => {
         const dday = dDayLabel(t.itemDate, today);
         const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
-        const warning = getDateWarning(t.occurDate);
         return (
           <SwipeRow
             key={t.itemId + (t.reminderId || "main")}
@@ -440,25 +439,14 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onView, onEdit
                       </span>
                     </>
                   )}
-                  {warning && (
-                    <>
-                      <span style={styles.dot}>·</span>
-                      <span style={styles.warningTag}>
-                        <AlertTriangle size={11} style={{ marginRight: 3, verticalAlign: -1 }} />
-                        {warning.label}
-                      </span>
-                    </>
-                  )}
                   {t.checklist.length > 0 && (
                     <span style={styles.checklistMeta}>
-                      <CheckSquare size={12} style={{ marginRight: 4, verticalAlign: -2 }} />
-                      체크리스트 있음
+                      <CheckSquare size={12} />
                     </span>
                   )}
                   {t.note && t.note.trim() && (
                     <span style={styles.noteMeta}>
-                      <FileText size={12} style={{ marginRight: 4, verticalAlign: -2 }} />
-                      메모 있음
+                      <FileText size={12} />
                     </span>
                   )}
                 </div>
@@ -818,7 +806,6 @@ function ChecklistEditor({ items, onChange }) {
 function ViewModal({ item, today, onClose, onEdit, onSave }) {
   const dday = dDayLabel(item.date, today);
   const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
-  const warning = getDateWarning(item.date);
 
   const toggleChecklistItem = (id) => {
     onSave({
@@ -846,12 +833,6 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
         {fmtFull(item.date)}
         {item.time && item.time !== "00:00" ? ` ${item.time}` : ""}
       </div>
-      {warning && (
-        <div style={styles.dateWarningRow}>
-          <AlertTriangle size={13} style={{ marginRight: 5 }} />
-          이 날짜는 {warning.label}이에요.
-        </div>
-      )}
 
       {item.note && item.note.trim() && (
         <div style={styles.viewSection}>
@@ -1314,8 +1295,8 @@ const styles = {
   directionBtn: { flex: 1, border: "none", background: "transparent", borderRadius: 8, padding: "8px 0", fontSize: 12.5, fontWeight: 600, color: "#8A93A0" },
   directionBtnActive: { background: "#fff", color: "#0D9488", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
   directionBtnActiveAfter: { background: "#fff", color: "#B45309", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
-  checklistMeta: { color: "#5B6470", fontWeight: 700, display: "inline-flex", alignItems: "center", background: "#fff", border: "1px solid #D7DCE1", padding: "3px 9px", borderRadius: 20, fontSize: 11.5 },
-  noteMeta: { color: "#5B6470", fontWeight: 700, display: "inline-flex", alignItems: "center", background: "#fff", border: "1px solid #D7DCE1", padding: "3px 9px", borderRadius: 20, fontSize: 11.5 },
+  checklistMeta: { color: "#8A93A0", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", border: "1px solid #D7DCE1", width: 22, height: 22, borderRadius: "50%" },
+  noteMeta: { color: "#8A93A0", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", border: "1px solid #D7DCE1", width: 22, height: 22, borderRadius: "50%" },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
   registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
   tplHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
