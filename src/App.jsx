@@ -787,6 +787,11 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, onClose, o
   const removeReminder = (id) => setReminders(reminders.filter((r) => r.id !== id));
 
   const applyPreset = (p) => {
+    const hasExisting = checklist.length > 0 || reminders.some((r) => r.label.trim());
+    if (hasExisting) {
+      const ok = window.confirm("이미 입력된 체크리스트/딸림 일정이 프리셋 내용으로 덮어씌워져요. 계속할까요?");
+      if (!ok) return;
+    }
     setChecklist((p.checklist || []).map((c) => ({ id: uid(), text: c.text, checked: false })));
     setChecklistOpen((p.checklist || []).length > 0);
     setReminders((p.reminders || []).map((r) => ({ id: uid(), days: r.days, direction: r.direction || "before", label: r.label, done: false })));
