@@ -133,7 +133,7 @@ function normalizeReminder(r) {
 }
 
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", note: "", ...raw, reminders: raw.reminders.map(normalizeReminder) };
+  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -142,6 +142,8 @@ function normalizeItem(raw) {
     pinned: false,
     time: "00:00",
     note: "",
+    recurring: false,
+    lastDoneDate: null,
     reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
@@ -157,6 +159,24 @@ const BACKUP_REMINDER_DAYS = 7;
 function buildTodos(items, today) {
   const todos = [];
   items.forEach((it) => {
+    if (it.recurring) {
+      todos.push({
+        itemId: it.id,
+        reminderId: null,
+        kind: "daily",
+        itemTitle: it.title,
+        label: it.title,
+        itemDate: it.date,
+        occurDate: today,
+        pinned: !!it.pinned,
+        time: it.time || "00:00",
+        hasSub: false,
+        checklist: it.checklist || [],
+        note: it.note || "",
+        done: it.lastDoneDate === today,
+      });
+      return;
+    }
     if (!it.done && it.date <= today) {
       todos.push({
         itemId: it.id,
@@ -404,6 +424,9 @@ export default function App() {
   const restoreItem = (itemId) => {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done: false } : it)));
   };
+  const toggleDailyDone = (itemId, done) => {
+    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, lastDoneDate: done ? today : null } : it)));
+  };
   const savePreset = (preset) => persistPresets([...presets, preset]);
   const deletePreset = (id) => persistPresets(presets.filter((p) => p.id !== id));
 
@@ -481,6 +504,7 @@ export default function App() {
             today={today}
             onToggleMain={toggleMainDone}
             onToggleReminder={toggleReminderDone}
+            onToggleDaily={toggleDailyDone}
             onView={(t) => setModal({ mode: "view", item: items.find((it) => it.id === t.itemId) })}
             onEdit={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
             onDelete={deleteItem}
@@ -527,7 +551,7 @@ export default function App() {
 }
 
 // ---------- 리스트 뷰 ----------
-function ListView({ todos, today, onToggleMain, onToggleReminder, onView, onEdit, onDelete, onPin }) {
+function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily, onView, onEdit, onDelete, onPin }) {
   if (todos.length === 0) {
     return (
       <div style={styles.emptyWrap}>
@@ -539,8 +563,9 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onView, onEdit
   return (
     <div>
       {todos.map((t) => {
-        const dday = dDayLabel(t.itemDate, today);
-        const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
+        const isDaily = t.kind === "daily";
+        const dday = isDaily ? null : dDayLabel(t.itemDate, today);
+        const isPastOrToday = !isDaily && (dday === "D-DAY" || dday.startsWith("D+"));
         return (
           <SwipeRow
             key={t.itemId + (t.reminderId || "main")}
@@ -554,25 +579,37 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onView, onEdit
             <div style={styles.card}>
               <button
                 onClick={() => {
+                  if (isDaily) {
+                    onToggleDaily(t.itemId, !t.done);
+                    return;
+                  }
                   if (!window.confirm("완료 처리하시겠습니까?")) return;
                   t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
                 }}
-                style={styles.checkCircle}
+                style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : "#D7DCE1" }}
                 aria-label="완료 처리"
               >
-                <Check size={13} color="transparent" />
+                <Check size={13} color={t.done ? "#fff" : "transparent"} />
               </button>
               <div style={styles.cardBody} onClick={() => onView(t)}>
                 <div style={styles.cardLine1}>
                   <span style={styles.cardTitleWrap}>
                     {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
-                    <span style={styles.stepLabel}>{t.label}</span>
+                    <span style={{ ...styles.stepLabel, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#9AA3AF" : "#1F2937" }}>{t.label}</span>
                     {t.kind === "reminder" && <span style={styles.relatedParens}> (메인: {t.itemTitle})</span>}
                   </span>
-                  <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
+                  {isDaily ? (
+                    <span style={{ ...styles.ddayText, color: "#7C3AED" }}>매일</span>
+                  ) : (
+                    <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
+                  )}
                 </div>
                 <div style={styles.metaRow}>
-                  <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
+                  {isDaily ? (
+                    <span>매일 반복 · 지울 때까지 계속 표시돼요</span>
+                  ) : (
+                    <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
+                  )}
                   {t.kind === "reminder" && (
                     <>
                       <span style={styles.dot}>·</span>
@@ -1038,13 +1075,18 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
       </div>
 
       <div style={styles.viewDdayRow}>
-        <span style={{ ...styles.ddayText, fontSize: 16, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
+        {item.recurring ? (
+          <span style={{ ...styles.ddayText, fontSize: 16, color: "#7C3AED" }}>매일</span>
+        ) : (
+          <span style={{ ...styles.ddayText, fontSize: 16, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
+        )}
         {item.pinned && <Pin size={14} color="#8A93A0" />}
       </div>
       <div style={styles.viewTitleText}>{item.title}</div>
       <div style={styles.viewDateText}>
-        {fmtFull(item.date)}
-        {item.time && item.time !== "00:00" ? ` ${item.time}` : ""}
+        {item.recurring
+          ? "매일 반복 · 지울 때까지 계속 표시돼요"
+          : `${fmtFull(item.date)}${item.time && item.time !== "00:00" ? ` ${item.time}` : ""}`}
       </div>
 
       {item.note && item.note.trim() && (
@@ -1110,6 +1152,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
   const [debouncedTitle, setDebouncedTitle] = useState(title);
   const [titleSuggestOpen, setTitleSuggestOpen] = useState(false);
   const [note, setNote] = useState(initialItem?.note || "");
+  const [recurring, setRecurring] = useState(initialItem?.recurring || false);
   const [date, setDate] = useState(initialItem?.date || defaultDate || today);
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
@@ -1207,7 +1250,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
   };
 
   const hasSubNow = reminders.some((r) => r.label.trim());
-  const canSave = title.trim() && date;
+  const canSave = title.trim() && (recurring || date);
 
   const save = () => {
     if (!canSave) return;
@@ -1215,25 +1258,29 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       id: initialItem?.id || uid(),
       title: title.trim(),
       note: note.trim(),
-      date,
-      time: time || "00:00",
+      date: recurring ? initialItem?.date || today : date,
+      time: recurring ? "00:00" : time || "00:00",
+      recurring,
+      lastDoneDate: initialItem?.lastDoneDate || null,
       done: initialItem?.done || false,
       pinned: initialItem?.pinned || false,
       checklist,
-      reminders: reminders
-        .filter((r) => r.label.trim())
-        .map((r) => ({
-          id: r.id,
-          days: Number(r.days) || 0,
-          direction: r.direction === "after" ? "after" : "before",
-          label: r.label.trim(),
-          done: r.done || false,
-          checklist: [],
-        })),
+      reminders: recurring
+        ? []
+        : reminders
+            .filter((r) => r.label.trim())
+            .map((r) => ({
+              id: r.id,
+              days: Number(r.days) || 0,
+              direction: r.direction === "after" ? "after" : "before",
+              label: r.label.trim(),
+              done: r.done || false,
+              checklist: [],
+            })),
     });
   };
 
-  const warning = getDateWarning(date);
+  const warning = recurring ? null : getDateWarning(date);
 
   const hasUnsavedChanges = () => {
     const curChecklist = checklist.map((c) => ({ text: (c.text || "").trim(), checked: !!c.checked }));
@@ -1251,13 +1298,14 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       return (
         title.trim() !== (initialItem.title || "") ||
         note.trim() !== (initialItem.note || "") ||
+        recurring !== !!initialItem.recurring ||
         date !== initialItem.date ||
         time !== (initialItem.time || "00:00") ||
         JSON.stringify(curChecklist) !== JSON.stringify(initChecklist) ||
         JSON.stringify(curReminders) !== JSON.stringify(initReminders)
       );
     }
-    return title.trim() !== "" || note.trim() !== "" || curChecklist.length > 0 || curReminders.length > 0;
+    return recurring || title.trim() !== "" || note.trim() !== "" || curChecklist.length > 0 || curReminders.length > 0;
   };
 
   const handleClose = () => {
@@ -1365,16 +1413,27 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
         style={styles.noteTextarea}
       />
 
-      <label style={styles.formLabel}>날짜</label>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...styles.formInput, flex: 2 }} />
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ ...styles.formInput, flex: 1 }} />
-      </div>
-      {warning && (
-        <div style={styles.dateWarningRow}>
-          <AlertTriangle size={13} style={{ marginRight: 5 }} />
-          이 날짜는 {warning.label}이에요.
+      <div style={styles.recurringRow} onClick={() => setRecurring(!recurring)}>
+        <div style={{ ...styles.toggleTrack, background: recurring ? "#0D9488" : "#D7DCE1" }}>
+          <div style={{ ...styles.toggleThumb, transform: recurring ? "translateX(18px)" : "translateX(0)" }} />
         </div>
+        <span style={styles.recurringLabel}>매일 반복 (날짜 없이, 지울 때까지 계속 떠요)</span>
+      </div>
+
+      {!recurring && (
+        <>
+          <label style={styles.formLabel}>날짜</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...styles.formInput, flex: 2 }} />
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ ...styles.formInput, flex: 1 }} />
+          </div>
+          {warning && (
+            <div style={styles.dateWarningRow}>
+              <AlertTriangle size={13} style={{ marginRight: 5 }} />
+              이 날짜는 {warning.label}이에요.
+            </div>
+          )}
+        </>
       )}
 
       {checklistOpen ? (
@@ -1403,52 +1462,56 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
         </button>
       )}
 
-      {reminders.map((r) => (
-        <div key={r.id} style={styles.reminderBlock}>
-          <div style={styles.stepEditRow}>
-            <input
-              type="number"
-              min="0"
-              value={r.days}
-              onChange={(e) => updateReminder(r.id, "days", e.target.value)}
-              style={styles.dayInput}
-            />
-            <div style={styles.directionToggle}>
-              <button
-                onClick={() => updateReminder(r.id, "direction", "before")}
-                style={{ ...styles.directionBtn, ...(r.direction !== "after" ? styles.directionBtnActive : {}) }}
-              >
-                일 전
-              </button>
-              <button
-                onClick={() => updateReminder(r.id, "direction", "after")}
-                style={{ ...styles.directionBtn, ...(r.direction === "after" ? styles.directionBtnActiveAfter : {}) }}
-              >
-                일 후
-              </button>
+      {!recurring && (
+        <>
+          {reminders.map((r) => (
+            <div key={r.id} style={styles.reminderBlock}>
+              <div style={styles.stepEditRow}>
+                <input
+                  type="number"
+                  min="0"
+                  value={r.days}
+                  onChange={(e) => updateReminder(r.id, "days", e.target.value)}
+                  style={styles.dayInput}
+                />
+                <div style={styles.directionToggle}>
+                  <button
+                    onClick={() => updateReminder(r.id, "direction", "before")}
+                    style={{ ...styles.directionBtn, ...(r.direction !== "after" ? styles.directionBtnActive : {}) }}
+                  >
+                    일 전
+                  </button>
+                  <button
+                    onClick={() => updateReminder(r.id, "direction", "after")}
+                    style={{ ...styles.directionBtn, ...(r.direction === "after" ? styles.directionBtnActiveAfter : {}) }}
+                  >
+                    일 후
+                  </button>
+                </div>
+                <button onClick={() => removeReminder(r.id)} style={styles.stepRemoveBtn}>
+                  <X size={14} color="#A8AFB8" />
+                </button>
+              </div>
+              <input
+                value={r.label}
+                onChange={(e) => updateReminder(r.id, "label", e.target.value)}
+                placeholder={r.direction === "after" ? "후속 조치 내용" : "할 일"}
+                style={{ ...styles.stepLabelInput, width: "100%", marginTop: 6 }}
+              />
             </div>
-            <button onClick={() => removeReminder(r.id)} style={styles.stepRemoveBtn}>
-              <X size={14} color="#A8AFB8" />
-            </button>
-          </div>
-          <input
-            value={r.label}
-            onChange={(e) => updateReminder(r.id, "label", e.target.value)}
-            placeholder={r.direction === "after" ? "후속 조치 내용" : "할 일"}
-            style={{ ...styles.stepLabelInput, width: "100%", marginTop: 6 }}
-          />
-        </div>
-      ))}
-      <button onClick={addReminder} style={styles.registerChecklistBtn}>
-        <Plus size={14} style={{ marginRight: 6 }} />
-        관련 디데이 추가
-      </button>
+          ))}
+          <button onClick={addReminder} style={styles.registerChecklistBtn}>
+            <Plus size={14} style={{ marginRight: 6 }} />
+            관련 디데이 추가
+          </button>
 
-      {hasSubNow && (
-        <button onClick={registerPreset} style={styles.registerPresetBtn}>
-          <Check size={14} style={{ marginRight: 6 }} />
-          프리셋으로 저장
-        </button>
+          {hasSubNow && (
+            <button onClick={registerPreset} style={styles.registerPresetBtn}>
+              <Check size={14} style={{ marginRight: 6 }} />
+              프리셋으로 저장
+            </button>
+          )}
+        </>
       )}
 
       {mode === "edit" && (
@@ -1607,6 +1670,10 @@ const styles = {
   formLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 18, marginBottom: 6 },
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937" },
   noteTextarea: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937", resize: "vertical", minHeight: 60 },
+  recurringRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 18, cursor: "pointer" },
+  toggleTrack: { width: 40, height: 22, borderRadius: 11, position: "relative", flexShrink: 0, transition: "background 0.15s" },
+  toggleThumb: { width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: 2, boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "transform 0.15s" },
+  recurringLabel: { fontSize: 13.5, color: "#1F2937", fontWeight: 600 },
   titleSuggestDropdown: { position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#fff", borderRadius: 10, boxShadow: "0 6px 20px rgba(15,23,42,0.15)", padding: 4, zIndex: 15, maxHeight: 230, overflowY: "auto" },
   titleSuggestRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "10px 10px", borderRadius: 8, cursor: "pointer" },
   titleSuggestText: { fontSize: 14, color: "#1F2937", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
