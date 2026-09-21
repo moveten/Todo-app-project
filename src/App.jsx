@@ -1898,7 +1898,7 @@ const styles = {
   stepNoteCloseBtn: { background: "none", border: "none", padding: 2 },
   checkCircleSmall: { width: 20, height: 20, borderRadius: "50%", border: "2px solid #D7DCE1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   checklistEditorRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 0" },
-  checklistEditorText: { flex: 1, fontSize: 13 },
+  checklistEditorText: { flex: 1, fontSize: 15.5 },
   checklistAddRow: { display: "flex", gap: 6, marginTop: 4 },
   checklistAddInput: { flex: 1, border: "1px solid #E5E9EC", borderRadius: 8, padding: "8px 10px", fontSize: 16, background: "#fff" },
   checklistAddBtn: { width: 32, height: 32, borderRadius: 8, background: "#0D9488", border: "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
