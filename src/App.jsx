@@ -1036,7 +1036,7 @@ function CalendarView({ items, today, onView, onEdit, onRestore, onSelectDate })
 
       <div style={styles.calSearchWrap}>
         <div style={styles.calSearchRow}>
-          <Search size={15} color="#9AA3AF" style={{ flexShrink: 0 }} />
+          <Search size={15} color="#0D9488" style={{ flexShrink: 0 }} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -1941,7 +1941,7 @@ const styles = {
   calNavBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" },
   calCardWrap: { background: "#FFFFFF", borderRadius: 14, padding: "10px 6px 4px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
   calSearchWrap: { position: "relative", marginBottom: 12 },
-  calSearchRow: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 12, padding: "10px 12px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
+  calSearchRow: { display: "flex", alignItems: "center", gap: 8, background: "#EAF6F4", border: "1.5px solid #BFE5DF", borderRadius: 12, padding: "10px 12px", boxShadow: "0 1px 3px rgba(15,23,42,0.05)" },
   calSearchInput: { flex: 1, border: "none", outline: "none", fontSize: 16, background: "transparent", color: "#1F2937" },
   calSearchClearBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   calSearchDropdown: { position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "#fff", borderRadius: 12, boxShadow: "0 6px 20px rgba(15,23,42,0.15)", padding: 6, maxHeight: 280, overflowY: "auto", zIndex: 20 },
