@@ -1990,7 +1990,7 @@ const styles = {
   upcomingWrap: { marginTop: 20, borderTop: "1px solid #EBEEF0", paddingTop: 4 },
   upcomingHeaderBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "14px 0", fontSize: 13.5, fontWeight: 700, color: "#5B6470" },
   upcomingList: { paddingBottom: 8 },
-  upcomingRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", cursor: "pointer" },
+  upcomingRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "#F0F2F4", borderRadius: 10, padding: "12px 14px", marginBottom: 8, cursor: "pointer" },
   upcomingRowTitle: { fontSize: 14, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   calEventBanner: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", cursor: "pointer" },
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
