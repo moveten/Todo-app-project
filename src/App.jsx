@@ -582,61 +582,61 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
   const done = todos.filter((t) => t.done);
   const notDoneKeys = notDone.map(keyOf);
   const notDoneKeysJoined = notDoneKeys.join(",");
+  const todoMap = {};
+  notDone.forEach((t) => (todoMap[keyOf(t)] = t));
+  const pinnedSignature = notDone.map((t) => (t.pinned ? "1" : "0")).join("");
 
   const [order, setOrder] = useState(() => {
     const validManual = (manualOrder || []).filter((k) => notDoneKeys.includes(k));
     const added = notDoneKeys.filter((k) => !validManual.includes(k));
-    return [...validManual, ...added];
+    const merged = [...validManual, ...added];
+    const pinnedKeys = merged.filter((k) => todoMap[k] && todoMap[k].pinned);
+    const restKeys = merged.filter((k) => !(todoMap[k] && todoMap[k].pinned));
+    return [...pinnedKeys, ...restKeys];
   });
   useEffect(() => {
     setOrder((prev) => {
       const stillValid = prev.filter((k) => notDoneKeys.includes(k));
       const added = notDoneKeys.filter((k) => !stillValid.includes(k));
-      return [...stillValid, ...added];
+      const merged = [...stillValid, ...added];
+      // 고정된 항목은 항상 맨 위로 올라오게 함
+      const pinnedKeys = merged.filter((k) => todoMap[k] && todoMap[k].pinned);
+      const restKeys = merged.filter((k) => !(todoMap[k] && todoMap[k].pinned));
+      return [...pinnedKeys, ...restKeys];
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notDoneKeysJoined]);
-
-  const todoMap = {};
-  notDone.forEach((t) => (todoMap[keyOf(t)] = t));
+  }, [notDoneKeysJoined, pinnedSignature]);
 
   const rowRefs = useRef({});
-  const dragInfo = useRef({ key: null, timer: null, dragging: false, startY: 0 });
+  const orderRef = useRef(order);
+  orderRef.current = order;
+  const dragInfo = useRef({ key: null, timer: null, dragging: false, startX: 0, startY: 0 });
   const [draggingKey, setDraggingKey] = useState(null);
   const [dragY, setDragY] = useState(0);
 
-  const startLongPress = (key, clientX, clientY) => {
-    dragInfo.current.key = key;
-    dragInfo.current.startX = clientX;
-    dragInfo.current.startY = clientY;
-    dragInfo.current.dragging = false;
-    clearTimeout(dragInfo.current.timer);
-    dragInfo.current.timer = setTimeout(() => {
-      dragInfo.current.dragging = true;
-      setDraggingKey(key);
-      if (navigator.vibrate) navigator.vibrate(12);
-    }, 450);
-  };
-  const cancelLongPress = () => clearTimeout(dragInfo.current.timer);
-  const onDragTouchMove = (key, clientX, clientY) => {
-    const dy0 = clientY - dragInfo.current.startY;
-    const dx0 = clientX - dragInfo.current.startX;
+  const onWindowTouchMove = (e) => {
+    const touch = e.touches[0];
+    const key = dragInfo.current.key;
+    if (!key) return;
+    const dy0 = touch.clientY - dragInfo.current.startY;
+    const dx0 = touch.clientX - dragInfo.current.startX;
     if (!dragInfo.current.dragging) {
-      // 어느 방향이든(특히 좌우 스와이프) 조금이라도 움직이면 드래그 정렬 시도를 취소해서
+      // 어느 방향이든(특히 좌우 스와이프) 조금이라도 움직이면 순서변경 시도를 취소해서
       // 스와이프(수정/삭제/고정)와 절대 겹치지 않도록 함
-      if (Math.abs(dy0) > 8 || Math.abs(dx0) > 8) cancelLongPress();
+      if (Math.abs(dy0) > 8 || Math.abs(dx0) > 8) cleanupDrag();
       return;
     }
-    setDragY(clientY - dragInfo.current.startY);
-    const idx = order.indexOf(key);
-    for (let i = 0; i < order.length; i++) {
+    setDragY(touch.clientY - dragInfo.current.startY);
+    const curOrder = orderRef.current;
+    const idx = curOrder.indexOf(key);
+    for (let i = 0; i < curOrder.length; i++) {
       if (i === idx) continue;
-      const el = rowRefs.current[order[i]];
+      const el = rowRefs.current[curOrder[i]];
       if (!el) continue;
       const rect = el.getBoundingClientRect();
       const mid = rect.top + rect.height / 2;
-      if ((i < idx && clientY < mid) || (i > idx && clientY > mid)) {
-        const newOrder = [...order];
+      if ((i < idx && touch.clientY < mid) || (i > idx && touch.clientY > mid)) {
+        const newOrder = [...curOrder];
         const [item] = newOrder.splice(idx, 1);
         newOrder.splice(i, 0, item);
         setOrder(newOrder);
@@ -644,16 +644,46 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
       }
     }
   };
-  const endDrag = () => {
-    cancelLongPress();
+  const onWindowTouchEnd = () => {
     if (dragInfo.current.dragging) {
-      onReorder(order);
+      onReorder(orderRef.current);
     }
+    cleanupDrag();
+  };
+  const cleanupDrag = () => {
+    clearTimeout(dragInfo.current.timer);
+    window.removeEventListener("touchmove", onWindowTouchMove);
+    window.removeEventListener("touchend", onWindowTouchEnd);
+    window.removeEventListener("touchcancel", onWindowTouchEnd);
     dragInfo.current.dragging = false;
     dragInfo.current.key = null;
     setDraggingKey(null);
     setDragY(0);
   };
+  const startLongPress = (key, clientX, clientY) => {
+    dragInfo.current.key = key;
+    dragInfo.current.startX = clientX;
+    dragInfo.current.startY = clientY;
+    dragInfo.current.dragging = false;
+    window.addEventListener("touchmove", onWindowTouchMove, { passive: true });
+    window.addEventListener("touchend", onWindowTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onWindowTouchEnd, { passive: true });
+    dragInfo.current.timer = setTimeout(() => {
+      dragInfo.current.dragging = true;
+      setDraggingKey(key);
+      if (navigator.vibrate) navigator.vibrate(12);
+    }, 450);
+  };
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("touchmove", onWindowTouchMove);
+      window.removeEventListener("touchend", onWindowTouchEnd);
+      window.removeEventListener("touchcancel", onWindowTouchEnd);
+      clearTimeout(dragInfo.current.timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const renderCard = (t) => {
     const isDaily = t.kind === "daily";
@@ -679,7 +709,6 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
                 t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
                 return;
               }
-              if (!window.confirm("완료 처리하시겠습니까?")) return;
               t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
             }}
             style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : "#D7DCE1" }}
@@ -776,9 +805,6 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
             key={key}
             ref={(el) => (rowRefs.current[key] = el)}
             onTouchStart={(e) => startLongPress(key, e.touches[0].clientX, e.touches[0].clientY)}
-            onTouchMove={(e) => onDragTouchMove(key, e.touches[0].clientX, e.touches[0].clientY)}
-            onTouchEnd={endDrag}
-            onTouchCancel={endDrag}
             style={{
               transform: isDragging ? `translateY(${dragY}px) scale(1.02)` : "none",
               position: isDragging ? "relative" : "static",
