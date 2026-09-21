@@ -128,12 +128,13 @@ function normalizeReminder(r) {
     direction: r.direction || "before",
     label: r.label,
     done: !!r.done,
+    doneDate: r.doneDate || null,
     checklist: r.checklist || [],
   };
 }
 
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, ...raw, reminders: raw.reminders.map(normalizeReminder) };
+  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -144,6 +145,7 @@ function normalizeItem(raw) {
     note: "",
     recurring: false,
     lastDoneDate: null,
+    doneDate: null,
     reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
@@ -177,7 +179,8 @@ function buildTodos(items, today) {
       });
       return;
     }
-    if (!it.done && it.date <= today) {
+    const mainDoneToday = it.done && it.doneDate === today;
+    if ((!it.done && it.date <= today) || mainDoneToday) {
       todos.push({
         itemId: it.id,
         reminderId: null,
@@ -191,14 +194,16 @@ function buildTodos(items, today) {
         hasSub: (it.reminders || []).length > 0,
         checklist: it.checklist || [],
         note: it.note || "",
+        done: mainDoneToday,
       });
     }
     (it.reminders || []).forEach((r) => {
-      if (r.done) return;
+      const reminderDoneToday = r.done && r.doneDate === today;
+      if (r.done && !reminderDoneToday) return;
       const direction = r.direction || "before";
       const days = r.days ?? 0;
       const occur = direction === "after" ? addDays(it.date, days) : addDays(it.date, -days);
-      if (occur <= today) {
+      if (occur <= today || reminderDoneToday) {
         todos.push({
           itemId: it.id,
           reminderId: r.id,
@@ -212,6 +217,7 @@ function buildTodos(items, today) {
           pinned: !!it.pinned,
           time: it.time || "00:00",
           checklist: r.checklist || [],
+          done: reminderDoneToday,
         });
       }
     });
@@ -409,12 +415,14 @@ export default function App() {
     setModal(null);
   };
   const toggleMainDone = (itemId, done) => {
-    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done } : it)));
+    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done, doneDate: done ? today : null } : it)));
   };
   const toggleReminderDone = (itemId, reminderId, done) => {
     persist(
       (itemsRef.current || []).map((it) =>
-        it.id === itemId ? { ...it, reminders: it.reminders.map((r) => (r.id === reminderId ? { ...r, done } : r)) } : it
+        it.id === itemId
+          ? { ...it, reminders: it.reminders.map((r) => (r.id === reminderId ? { ...r, done, doneDate: done ? today : null } : r)) }
+          : it
       )
     );
   };
@@ -422,7 +430,7 @@ export default function App() {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
   };
   const restoreItem = (itemId) => {
-    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done: false } : it)));
+    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done: false, doneDate: null } : it)));
   };
   const toggleDailyDone = (itemId, done) => {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, lastDoneDate: done ? today : null } : it)));
@@ -583,6 +591,10 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
                     onToggleDaily(t.itemId, !t.done);
                     return;
                   }
+                  if (t.done) {
+                    t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
+                    return;
+                  }
                   if (!window.confirm("완료 처리하시겠습니까?")) return;
                   t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
                 }}
@@ -599,7 +611,31 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
                     {t.kind === "reminder" && <span style={styles.relatedParens}> (메인: {t.itemTitle})</span>}
                   </span>
                   {isDaily ? (
-                    <span style={{ ...styles.ddayText, color: "#7C3AED" }}>매일</span>
+                    t.done ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleDaily(t.itemId, false);
+                        }}
+                        style={styles.restoreBtn}
+                      >
+                        <RotateCcw size={12} style={{ marginRight: 4 }} />
+                        복귀
+                      </button>
+                    ) : (
+                      <span style={{ ...styles.ddayText, color: "#7C3AED" }}>매일</span>
+                    )
+                  ) : t.done ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
+                      }}
+                      style={styles.restoreBtn}
+                    >
+                      <RotateCcw size={12} style={{ marginRight: 4 }} />
+                      복귀
+                    </button>
                   ) : (
                     <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
                   )}
@@ -1617,6 +1653,7 @@ const styles = {
   cardTitleWrap: { minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   relatedParens: { fontSize: 12.5, color: "#9AA3AF", fontWeight: 500 },
   ddayText: { fontSize: 14, fontWeight: 700, flexShrink: 0 },
+  restoreBtn: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "4px 10px", fontSize: 11.5, fontWeight: 700, color: "#5B6470", flexShrink: 0 },
   stepLabel: { fontSize: 15, fontWeight: 600, color: "#1F2937", lineHeight: 1.35 },
   metaRow: { fontSize: 12, color: "#9AA3AF", marginTop: 5, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 },
   dot: { color: "#DCE1E6" },
