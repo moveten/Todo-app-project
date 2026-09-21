@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, FileText, Download, Upload, ShieldCheck } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, FileText, Download, Upload, ShieldCheck, Image as ImageIcon } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -54,6 +54,38 @@ const fmtFullWithYear = (iso) => {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
 };
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+function resizeImageFile(file, maxDim = 1000, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 
 const dDayLabel = (target, today) => {
   const diff = diffDays(target, today);
@@ -134,7 +166,7 @@ function normalizeReminder(r) {
 }
 
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, ...raw, reminders: raw.reminders.map(normalizeReminder) };
+  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, photos: [], ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -146,6 +178,7 @@ function normalizeItem(raw) {
     recurring: false,
     lastDoneDate: null,
     doneDate: null,
+    photos: [],
     reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
@@ -176,6 +209,7 @@ function buildTodos(items, today) {
         hasSub: false,
         checklist: it.checklist || [],
         note: it.note || "",
+        photos: it.photos || [],
         done: it.lastDoneDate === today,
       });
       return;
@@ -195,6 +229,7 @@ function buildTodos(items, today) {
         hasSub: (it.reminders || []).length > 0,
         checklist: it.checklist || [],
         note: it.note || "",
+        photos: it.photos || [],
         done: mainDoneToday,
       });
     }
@@ -777,6 +812,11 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
                   <FileText size={12} />
                 </span>
               )}
+              {t.photos && t.photos.length > 0 && (
+                <span style={styles.noteMeta}>
+                  <ImageIcon size={12} />
+                </span>
+              )}
             </div>
           </div>
           <ChevronRight size={16} color="#A8AFB8" onClick={() => onView(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
@@ -1231,6 +1271,7 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
   const dday = dDayLabel(item.date, today);
   const isPastOrToday = dday === "D-DAY" || dday.startsWith("D+");
   const touchRef = useRef({ startY: 0, startX: 0 });
+  const [viewPhoto, setViewPhoto] = useState(null);
 
   const onTouchStart = (e) => {
     touchRef.current.startY = e.touches[0].clientY;
@@ -1282,6 +1323,17 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
         </div>
       )}
 
+      {item.photos && item.photos.length > 0 && (
+        <div style={styles.viewSection}>
+          <div style={styles.viewSectionLabel}>사진</div>
+          <div style={styles.photoRow}>
+            {item.photos.map((p, idx) => (
+              <img key={idx} src={p} onClick={() => setViewPhoto(p)} style={styles.photoThumb} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {item.checklist && item.checklist.length > 0 && (
         <div style={styles.viewSection}>
           <div style={styles.viewSectionLabel}>체크리스트</div>
@@ -1328,6 +1380,17 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
           </button>
         </div>
       </div>
+      {viewPhoto && (
+        <div
+          style={styles.photoViewerOverlay}
+          onClick={(e) => {
+            e.stopPropagation();
+            setViewPhoto(null);
+          }}
+        >
+          <img src={viewPhoto} style={styles.photoViewerImg} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1338,6 +1401,8 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
   const [debouncedTitle, setDebouncedTitle] = useState(title);
   const [titleSuggestOpen, setTitleSuggestOpen] = useState(false);
   const [note, setNote] = useState(initialItem?.note || "");
+  const [photos, setPhotos] = useState(initialItem?.photos || []);
+  const [viewPhoto, setViewPhoto] = useState(null);
   const [recurring, setRecurring] = useState(initialItem?.recurring || false);
   const [date, setDate] = useState(initialItem?.date || defaultDate || today);
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
@@ -1365,6 +1430,17 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
   };
   const addReminder = () => setReminders([...reminders, { id: uid(), days: 1, direction: "before", label: "", done: false }]);
   const removeReminder = (id) => setReminders(reminders.filter((r) => r.id !== id));
+
+  const addPhoto = async (file) => {
+    if (!file) return;
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setPhotos((prev) => [...prev, dataUrl]);
+    } catch (e) {
+      // 이미지 처리 실패 시 조용히 무시
+    }
+  };
+  const removePhoto = (idx) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
 
   // 일정명 자동완성: 타이핑 멈추고 0.15초 후에만 검색 (데이터 많아도 버벅이지 않도록)
   useEffect(() => {
@@ -1445,6 +1521,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       id: initialItem?.id || uid(),
       title: title.trim(),
       note: note.trim(),
+      photos,
       date: recurring ? initialItem?.date || today : date,
       time: recurring ? "00:00" : time || "00:00",
       recurring,
@@ -1488,11 +1565,12 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
         recurring !== !!initialItem.recurring ||
         date !== initialItem.date ||
         time !== (initialItem.time || "00:00") ||
+        photos.length !== (initialItem.photos || []).length ||
         JSON.stringify(curChecklist) !== JSON.stringify(initChecklist) ||
         JSON.stringify(curReminders) !== JSON.stringify(initReminders)
       );
     }
-    return recurring || title.trim() !== "" || note.trim() !== "" || curChecklist.length > 0 || curReminders.length > 0;
+    return recurring || title.trim() !== "" || note.trim() !== "" || photos.length > 0 || curChecklist.length > 0 || curReminders.length > 0;
   };
 
   const handleClose = () => {
@@ -1607,6 +1685,29 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
         placeholder="메모를 입력하세요 (선택)"
         style={styles.noteTextarea}
       />
+
+      <div style={styles.photoRow}>
+        {photos.map((p, idx) => (
+          <div key={idx} style={styles.photoThumbWrap}>
+            <img src={p} onClick={() => setViewPhoto(p)} style={styles.photoThumb} />
+            <button onClick={() => removePhoto(idx)} style={styles.photoRemoveBtn}>
+              <X size={10} color="#fff" />
+            </button>
+          </div>
+        ))}
+        <label style={styles.photoAddBtn}>
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              addPhoto(e.target.files && e.target.files[0]);
+              e.target.value = "";
+            }}
+          />
+          <ImageIcon size={16} color="#8A93A0" />
+        </label>
+      </div>
 
       <div style={styles.recurringRow} onClick={() => setRecurring(!recurring)}>
         <div style={{ ...styles.toggleTrack, background: recurring ? "#0D9488" : "#D7DCE1" }}>
@@ -1734,6 +1835,17 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
           onCancel={() => setPresetPrompt(null)}
           onConfirm={confirmPresetName}
         />
+      )}
+      {viewPhoto && (
+        <div
+          style={styles.photoViewerOverlay}
+          onClick={(e) => {
+            e.stopPropagation();
+            setViewPhoto(null);
+          }}
+        >
+          <img src={viewPhoto} style={styles.photoViewerImg} />
+        </div>
       )}
     </div>
   );
@@ -1866,6 +1978,13 @@ const styles = {
   formLabel: { display: "block", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 18, marginBottom: 6 },
   formInput: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937" },
   noteTextarea: { width: "100%", border: "1px solid #E5E9EC", borderRadius: 10, padding: "11px 12px", fontSize: 16, background: "#F7F8FA", color: "#1F2937", resize: "vertical", minHeight: 60 },
+  photoRow: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" },
+  photoThumbWrap: { position: "relative", width: 54, height: 54 },
+  photoThumb: { width: 54, height: 54, borderRadius: 10, objectFit: "cover", border: "1px solid #E5E9EC", cursor: "pointer" },
+  photoRemoveBtn: { position: "absolute", top: -6, right: -6, background: "#DC5B45", border: "none", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center" },
+  photoAddBtn: { width: 54, height: 54, borderRadius: 10, border: "1px dashed #CFC7B4", background: "#F7F8FA", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  photoViewerOverlay: { position: "fixed", inset: 0, background: "rgba(10,8,5,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 20 },
+  photoViewerImg: { maxWidth: "100%", maxHeight: "100%", borderRadius: 10 },
   recurringRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 18, cursor: "pointer" },
   toggleTrack: { width: 40, height: 22, borderRadius: 11, position: "relative", flexShrink: 0, transition: "background 0.15s" },
   toggleThumb: { width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: 2, boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "transform 0.15s" },
