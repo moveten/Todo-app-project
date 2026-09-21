@@ -19,7 +19,7 @@ const storage = {
     }
   },
 };
-import { Plus, X, Check, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, FileText, Download, Upload, ShieldCheck, Image as ImageIcon } from "lucide-react";
+import { Plus, X, Check, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, CalendarDays, LayoutList, Trash2, AlertTriangle, Pencil, ListChecks, Pin, RotateCcw, CheckSquare, Search, FileText, Download, Upload, ShieldCheck, Image as ImageIcon } from "lucide-react";
 
 // ---------- 유틸 ----------
 const pad = (n) => String(n).padStart(2, "0");
@@ -450,6 +450,9 @@ export default function App() {
 
   const today = todayISO();
   const todos = buildTodos(items, today);
+  const upcomingItems = items
+    .filter((it) => !it.recurring && it.date > today)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const backupOverdue =
     items.length > 0 &&
     (!lastBackupAt || diffDays(today, lastBackupAt.slice(0, 10)) >= BACKUP_REMINDER_DAYS);
@@ -559,6 +562,7 @@ export default function App() {
         ) : view === "list" ? (
           <ListView
             todos={todos}
+            upcomingItems={upcomingItems}
             today={today}
             onToggleMain={toggleMainDone}
             onToggleReminder={toggleReminderDone}
@@ -611,7 +615,8 @@ export default function App() {
 }
 
 // ---------- 리스트 뷰 ----------
-function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily, onView, onEdit, onDelete, onPin, manualOrder, onReorder }) {
+function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder, onToggleDaily, onView, onEdit, onDelete, onPin, manualOrder, onReorder }) {
+  const [showUpcoming, setShowUpcoming] = useState(false);
   const keyOf = (t) => `${t.itemId}:${t.reminderId || "main"}`;
   const notDone = todos.filter((t) => !t.done);
   const done = todos.filter((t) => t.done);
@@ -825,11 +830,34 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
     );
   };
 
+  const upcomingSection = (
+    <div style={styles.upcomingWrap}>
+      <button onClick={() => setShowUpcoming(!showUpcoming)} style={styles.upcomingHeaderBtn}>
+        <span>이후 일정 {upcomingItems.length > 0 ? `(${upcomingItems.length})` : ""}</span>
+        <ChevronDown size={16} color="#8A93A0" style={{ transform: showUpcoming ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+      {showUpcoming && (
+        <div style={styles.upcomingList}>
+          {upcomingItems.length === 0 && <div style={styles.calEmptyText}>이후로 등록된 일정이 없어요.</div>}
+          {upcomingItems.map((it) => (
+            <div key={it.id} style={styles.upcomingRow} onClick={() => onView({ itemId: it.id })}>
+              <span style={styles.upcomingRowTitle}>{it.title}</span>
+              <span style={{ ...styles.ddayText, fontSize: 13, color: "#16A34A" }}>{dDayLabel(it.date, today)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   if (todos.length === 0) {
     return (
-      <div style={styles.emptyWrap}>
-        <div style={styles.emptyStamp}>완료</div>
-        <div style={styles.emptyText}>지금 처리할 일이 없어요.</div>
+      <div>
+        <div style={styles.emptyWrap}>
+          <div style={styles.emptyStamp}>완료</div>
+          <div style={styles.emptyText}>지금 처리할 일이 없어요.</div>
+        </div>
+        {upcomingSection}
       </div>
     );
   }
@@ -861,6 +889,7 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
       {done.map((t) => (
         <div key={keyOf(t)}>{renderCard(t)}</div>
       ))}
+      {upcomingSection}
     </div>
   );
 }
@@ -1958,6 +1987,11 @@ const styles = {
   calDayPanelTitleRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
   calDayPanelTitle: { fontSize: 13.5, fontWeight: 700, color: "#1F2937" },
   calEmptyText: { fontSize: 12.5, color: "#9AA3AF", padding: "10px 2px" },
+  upcomingWrap: { marginTop: 20, borderTop: "1px solid #EBEEF0", paddingTop: 4 },
+  upcomingHeaderBtn: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "12px 2px", fontSize: 13, fontWeight: 700, color: "#5B6470" },
+  upcomingList: { paddingBottom: 8 },
+  upcomingRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", cursor: "pointer" },
+  upcomingRowTitle: { fontSize: 14, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   calEventBanner: { display: "flex", alignItems: "center", gap: 8, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", cursor: "pointer" },
   calEventBannerText: { fontSize: 13, fontWeight: 600, color: "#1F2937", flex: 1 },
   calEventEditBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
