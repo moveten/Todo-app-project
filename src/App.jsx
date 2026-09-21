@@ -155,6 +155,7 @@ const STORAGE_BACKUP_KEY = "moved-app:events:backup";
 const PRESET_KEY = "moved-app:presets";
 const PRESET_BACKUP_KEY = "moved-app:presets:backup";
 const LAST_BACKUP_KEY = "moved-app:last-backup-at";
+const ORDER_KEY = "moved-app:manual-order";
 const BACKUP_REMINDER_DAYS = 7;
 
 // ---------- 오늘 기준 할 일 목록 계산 ----------
@@ -223,6 +224,7 @@ function buildTodos(items, today) {
     });
   });
   todos.sort((a, b) => {
+    if (!!a.done !== !!b.done) return a.done ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (a.occurDate !== b.occurDate) return a.occurDate < b.occurDate ? -1 : 1;
     if (a.itemDate !== b.itemDate) return a.itemDate < b.itemDate ? -1 : 1;
@@ -240,6 +242,7 @@ export default function App() {
   const [saveError, setSaveError] = useState(false);
   const [loadWarning, setLoadWarning] = useState(false);
   const [lastBackupAt, setLastBackupAt] = useState(null);
+  const [manualOrder, setManualOrderState] = useState([]);
   const itemsRef = useRef(null);
 
   // ---- 안전한 불러오기: 메인 데이터가 손상/유실됐으면 백업 키에서 자동 복구 ----
@@ -302,8 +305,20 @@ export default function App() {
       } catch (e) {
         setLastBackupAt(null);
       }
+
+      try {
+        const res4 = await storage.get(ORDER_KEY);
+        setManualOrderState(res4 ? JSON.parse(res4.value) : []);
+      } catch (e) {
+        setManualOrderState([]);
+      }
     })();
   }, []);
+
+  const setManualOrder = (orderKeys) => {
+    setManualOrderState(orderKeys);
+    storage.set(ORDER_KEY, JSON.stringify(orderKeys)).catch(() => {});
+  };
 
   const persist = async (next) => {
     setItems(next);
@@ -517,6 +532,8 @@ export default function App() {
             onEdit={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
             onDelete={deleteItem}
             onPin={togglePinned}
+            manualOrder={manualOrder}
+            onReorder={setManualOrder}
           />
         ) : (
           <CalendarView
@@ -559,7 +576,182 @@ export default function App() {
 }
 
 // ---------- 리스트 뷰 ----------
-function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily, onView, onEdit, onDelete, onPin }) {
+function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily, onView, onEdit, onDelete, onPin, manualOrder, onReorder }) {
+  const keyOf = (t) => `${t.itemId}:${t.reminderId || "main"}`;
+  const notDone = todos.filter((t) => !t.done);
+  const done = todos.filter((t) => t.done);
+  const notDoneKeys = notDone.map(keyOf);
+  const notDoneKeysJoined = notDoneKeys.join(",");
+
+  const [order, setOrder] = useState(() => {
+    const validManual = (manualOrder || []).filter((k) => notDoneKeys.includes(k));
+    const added = notDoneKeys.filter((k) => !validManual.includes(k));
+    return [...validManual, ...added];
+  });
+  useEffect(() => {
+    setOrder((prev) => {
+      const stillValid = prev.filter((k) => notDoneKeys.includes(k));
+      const added = notDoneKeys.filter((k) => !stillValid.includes(k));
+      return [...stillValid, ...added];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notDoneKeysJoined]);
+
+  const todoMap = {};
+  notDone.forEach((t) => (todoMap[keyOf(t)] = t));
+
+  const rowRefs = useRef({});
+  const dragInfo = useRef({ key: null, timer: null, dragging: false, startY: 0 });
+  const [draggingKey, setDraggingKey] = useState(null);
+  const [dragY, setDragY] = useState(0);
+
+  const startLongPress = (key, clientY) => {
+    dragInfo.current.key = key;
+    dragInfo.current.startY = clientY;
+    dragInfo.current.dragging = false;
+    clearTimeout(dragInfo.current.timer);
+    dragInfo.current.timer = setTimeout(() => {
+      dragInfo.current.dragging = true;
+      setDraggingKey(key);
+      if (navigator.vibrate) navigator.vibrate(12);
+    }, 450);
+  };
+  const cancelLongPress = () => clearTimeout(dragInfo.current.timer);
+  const onDragTouchMove = (key, clientY) => {
+    const dy0 = clientY - dragInfo.current.startY;
+    if (!dragInfo.current.dragging) {
+      if (Math.abs(dy0) > 10) cancelLongPress();
+      return;
+    }
+    setDragY(clientY - dragInfo.current.startY);
+    const idx = order.indexOf(key);
+    for (let i = 0; i < order.length; i++) {
+      if (i === idx) continue;
+      const el = rowRefs.current[order[i]];
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if ((i < idx && clientY < mid) || (i > idx && clientY > mid)) {
+        const newOrder = [...order];
+        const [item] = newOrder.splice(idx, 1);
+        newOrder.splice(i, 0, item);
+        setOrder(newOrder);
+        break;
+      }
+    }
+  };
+  const endDrag = () => {
+    cancelLongPress();
+    if (dragInfo.current.dragging) {
+      onReorder(order);
+    }
+    dragInfo.current.dragging = false;
+    dragInfo.current.key = null;
+    setDraggingKey(null);
+    setDragY(0);
+  };
+
+  const renderCard = (t) => {
+    const isDaily = t.kind === "daily";
+    const dday = isDaily ? null : dDayLabel(t.itemDate, today);
+    const isPastOrToday = !isDaily && (dday === "D-DAY" || dday.startsWith("D+"));
+    return (
+      <SwipeRow
+        pinned={t.pinned}
+        onEdit={() => onEdit(t)}
+        onDelete={() => {
+          if (window.confirm("이 일정을 삭제할까요?")) onDelete(t.itemId);
+        }}
+        onPin={() => onPin(t.itemId)}
+      >
+        <div style={styles.card}>
+          <button
+            onClick={() => {
+              if (isDaily) {
+                onToggleDaily(t.itemId, !t.done);
+                return;
+              }
+              if (t.done) {
+                t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
+                return;
+              }
+              if (!window.confirm("완료 처리하시겠습니까?")) return;
+              t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
+            }}
+            style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : "#D7DCE1" }}
+            aria-label="완료 처리"
+          >
+            <Check size={13} color={t.done ? "#fff" : "transparent"} />
+          </button>
+          <div style={styles.cardBody} onClick={() => onView(t)}>
+            <div style={styles.cardLine1}>
+              <span style={styles.cardTitleWrap}>
+                {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
+                <span style={{ ...styles.stepLabel, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#9AA3AF" : "#1F2937" }}>{t.label}</span>
+                {t.kind === "reminder" && <span style={styles.relatedParens}> (메인: {t.itemTitle})</span>}
+              </span>
+              {isDaily ? (
+                t.done ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleDaily(t.itemId, false);
+                    }}
+                    style={styles.restoreBtn}
+                  >
+                    <RotateCcw size={12} style={{ marginRight: 4 }} />
+                    복귀
+                  </button>
+                ) : (
+                  <span style={{ ...styles.ddayText, color: "#7C3AED" }}>매일</span>
+                )
+              ) : t.done ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
+                  }}
+                  style={styles.restoreBtn}
+                >
+                  <RotateCcw size={12} style={{ marginRight: 4 }} />
+                  복귀
+                </button>
+              ) : (
+                <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
+              )}
+            </div>
+            <div style={styles.metaRow}>
+              {isDaily ? (
+                <span>매일 반복 · 지울 때까지 계속 표시돼요</span>
+              ) : (
+                <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
+              )}
+              {t.kind === "reminder" && (
+                <>
+                  <span style={styles.dot}>·</span>
+                  <span style={{ color: t.direction === "after" ? "#B45309" : "#8A93A0" }}>
+                    {t.direction === "after" ? `후속 조치 D+${t.days}` : `사전 준비 D-${t.days}`}
+                  </span>
+                </>
+              )}
+              {t.checklist.length > 0 && (
+                <span style={styles.checklistMeta}>
+                  <CheckSquare size={12} />
+                </span>
+              )}
+              {t.note && t.note.trim() && (
+                <span style={styles.noteMeta}>
+                  <FileText size={12} />
+                </span>
+              )}
+            </div>
+          </div>
+          <ChevronRight size={16} color="#A8AFB8" onClick={() => onView(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
+        </div>
+      </SwipeRow>
+    );
+  };
+
   if (todos.length === 0) {
     return (
       <div style={styles.emptyWrap}>
@@ -568,109 +760,37 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
       </div>
     );
   }
+
   return (
     <div>
-      {todos.map((t) => {
-        const isDaily = t.kind === "daily";
-        const dday = isDaily ? null : dDayLabel(t.itemDate, today);
-        const isPastOrToday = !isDaily && (dday === "D-DAY" || dday.startsWith("D+"));
+      {order.map((key) => {
+        const t = todoMap[key];
+        if (!t) return null;
+        const isDragging = draggingKey === key;
         return (
-          <SwipeRow
-            key={t.itemId + (t.reminderId || "main")}
-            pinned={t.pinned}
-            onEdit={() => onEdit(t)}
-            onDelete={() => {
-              if (window.confirm("이 일정을 삭제할까요?")) onDelete(t.itemId);
+          <div
+            key={key}
+            ref={(el) => (rowRefs.current[key] = el)}
+            onTouchStart={(e) => startLongPress(key, e.touches[0].clientY)}
+            onTouchMove={(e) => onDragTouchMove(key, e.touches[0].clientY)}
+            onTouchEnd={endDrag}
+            onTouchCancel={endDrag}
+            style={{
+              transform: isDragging ? `translateY(${dragY}px) scale(1.02)` : "none",
+              position: isDragging ? "relative" : "static",
+              zIndex: isDragging ? 5 : "auto",
+              boxShadow: isDragging ? "0 8px 20px rgba(15,23,42,0.18)" : "none",
+              borderRadius: 14,
+              transition: isDragging ? "none" : "transform 0.15s",
             }}
-            onPin={() => onPin(t.itemId)}
           >
-            <div style={styles.card}>
-              <button
-                onClick={() => {
-                  if (isDaily) {
-                    onToggleDaily(t.itemId, !t.done);
-                    return;
-                  }
-                  if (t.done) {
-                    t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
-                    return;
-                  }
-                  if (!window.confirm("완료 처리하시겠습니까?")) return;
-                  t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
-                }}
-                style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : "#D7DCE1" }}
-                aria-label="완료 처리"
-              >
-                <Check size={13} color={t.done ? "#fff" : "transparent"} />
-              </button>
-              <div style={styles.cardBody} onClick={() => onView(t)}>
-                <div style={styles.cardLine1}>
-                  <span style={styles.cardTitleWrap}>
-                    {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
-                    <span style={{ ...styles.stepLabel, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#9AA3AF" : "#1F2937" }}>{t.label}</span>
-                    {t.kind === "reminder" && <span style={styles.relatedParens}> (메인: {t.itemTitle})</span>}
-                  </span>
-                  {isDaily ? (
-                    t.done ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleDaily(t.itemId, false);
-                        }}
-                        style={styles.restoreBtn}
-                      >
-                        <RotateCcw size={12} style={{ marginRight: 4 }} />
-                        복귀
-                      </button>
-                    ) : (
-                      <span style={{ ...styles.ddayText, color: "#7C3AED" }}>매일</span>
-                    )
-                  ) : t.done ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
-                      }}
-                      style={styles.restoreBtn}
-                    >
-                      <RotateCcw size={12} style={{ marginRight: 4 }} />
-                      복귀
-                    </button>
-                  ) : (
-                    <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
-                  )}
-                </div>
-                <div style={styles.metaRow}>
-                  {isDaily ? (
-                    <span>매일 반복 · 지울 때까지 계속 표시돼요</span>
-                  ) : (
-                    <span>{fmtMD(t.occurDate)}{t.time && t.time !== "00:00" ? ` ${t.time}` : ""}</span>
-                  )}
-                  {t.kind === "reminder" && (
-                    <>
-                      <span style={styles.dot}>·</span>
-                      <span style={{ color: t.direction === "after" ? "#B45309" : "#8A93A0" }}>
-                        {t.direction === "after" ? `후속 조치 D+${t.days}` : `사전 준비 D-${t.days}`}
-                      </span>
-                    </>
-                  )}
-                  {t.checklist.length > 0 && (
-                    <span style={styles.checklistMeta}>
-                      <CheckSquare size={12} />
-                    </span>
-                  )}
-                  {t.note && t.note.trim() && (
-                    <span style={styles.noteMeta}>
-                      <FileText size={12} />
-                    </span>
-                  )}
-                </div>
-              </div>
-              <ChevronRight size={16} color="#A8AFB8" onClick={() => onView(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
-            </div>
-          </SwipeRow>
+            {renderCard(t)}
+          </div>
         );
       })}
+      {done.map((t) => (
+        <div key={keyOf(t)}>{renderCard(t)}</div>
+      ))}
     </div>
   );
 }
