@@ -605,8 +605,9 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
   const [draggingKey, setDraggingKey] = useState(null);
   const [dragY, setDragY] = useState(0);
 
-  const startLongPress = (key, clientY) => {
+  const startLongPress = (key, clientX, clientY) => {
     dragInfo.current.key = key;
+    dragInfo.current.startX = clientX;
     dragInfo.current.startY = clientY;
     dragInfo.current.dragging = false;
     clearTimeout(dragInfo.current.timer);
@@ -617,10 +618,13 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
     }, 450);
   };
   const cancelLongPress = () => clearTimeout(dragInfo.current.timer);
-  const onDragTouchMove = (key, clientY) => {
+  const onDragTouchMove = (key, clientX, clientY) => {
     const dy0 = clientY - dragInfo.current.startY;
+    const dx0 = clientX - dragInfo.current.startX;
     if (!dragInfo.current.dragging) {
-      if (Math.abs(dy0) > 10) cancelLongPress();
+      // 어느 방향이든(특히 좌우 스와이프) 조금이라도 움직이면 드래그 정렬 시도를 취소해서
+      // 스와이프(수정/삭제/고정)와 절대 겹치지 않도록 함
+      if (Math.abs(dy0) > 8 || Math.abs(dx0) > 8) cancelLongPress();
       return;
     }
     setDragY(clientY - dragInfo.current.startY);
@@ -771,8 +775,8 @@ function ListView({ todos, today, onToggleMain, onToggleReminder, onToggleDaily,
           <div
             key={key}
             ref={(el) => (rowRefs.current[key] = el)}
-            onTouchStart={(e) => startLongPress(key, e.touches[0].clientY)}
-            onTouchMove={(e) => onDragTouchMove(key, e.touches[0].clientY)}
+            onTouchStart={(e) => startLongPress(key, e.touches[0].clientX, e.touches[0].clientY)}
+            onTouchMove={(e) => onDragTouchMove(key, e.touches[0].clientX, e.touches[0].clientY)}
             onTouchEnd={endDrag}
             onTouchCancel={endDrag}
             style={{
@@ -1379,15 +1383,16 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
     const cleanReminders = reminders
       .filter((r) => r.label.trim())
       .map((r) => ({ days: Number(r.days) || 0, direction: r.direction === "after" ? "after" : "before", label: r.label.trim() }));
-    if (cleanReminders.length === 0) {
-      window.alert("프리셋으로 저장할 딸림 일정이 없어요.");
+    const cleanChecklist = checklist.filter((c) => c.text.trim()).map((c) => ({ text: c.text.trim() }));
+    if (cleanReminders.length === 0 && cleanChecklist.length === 0) {
+      window.alert("프리셋으로 저장할 체크리스트나 딸림 일정이 없어요.");
       return;
     }
     const ok = window.confirm("체크리스트와 딸림 일정 구성을 프리셋으로 저장하시겠습니까?");
     if (!ok) return;
     setPresetPrompt({
       reminders: cleanReminders,
-      checklistToSave: checklist.filter((c) => c.text.trim()).map((c) => ({ text: c.text.trim() })),
+      checklistToSave: cleanChecklist,
     });
   };
 
@@ -1405,7 +1410,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
     setPresetPrompt(null);
   };
 
-  const hasSubNow = reminders.some((r) => r.label.trim());
+  const hasSubNow = reminders.some((r) => r.label.trim()) || checklist.some((c) => c.text.trim());
   const canSave = title.trim() && (recurring || date);
 
   const save = () => {
@@ -1660,14 +1665,14 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
             <Plus size={14} style={{ marginRight: 6 }} />
             관련 디데이 추가
           </button>
-
-          {hasSubNow && (
-            <button onClick={registerPreset} style={styles.registerPresetBtn}>
-              <Check size={14} style={{ marginRight: 6 }} />
-              프리셋으로 저장
-            </button>
-          )}
         </>
+      )}
+
+      {hasSubNow && (
+        <button onClick={registerPreset} style={styles.registerPresetBtn}>
+          <Check size={14} style={{ marginRight: 6 }} />
+          프리셋으로 저장
+        </button>
       )}
 
       {mode === "edit" && (
