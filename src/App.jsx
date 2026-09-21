@@ -1988,7 +1988,7 @@ const styles = {
   calDayPanelTitle: { fontSize: 13.5, fontWeight: 700, color: "#1F2937" },
   calEmptyText: { fontSize: 12.5, color: "#9AA3AF", padding: "10px 2px" },
   upcomingWrap: { marginTop: 20, borderTop: "1px solid #EBEEF0", paddingTop: 4 },
-  upcomingHeaderBtn: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "12px 2px", fontSize: 13, fontWeight: 700, color: "#5B6470" },
+  upcomingHeaderBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "#fff", border: "1px solid #E5E9EC", borderRadius: 12, padding: "16px 0", fontSize: 14, fontWeight: 700, color: "#5B6470", boxShadow: "0 1px 3px rgba(15,23,42,0.05)" },
   upcomingList: { paddingBottom: 8 },
   upcomingRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", cursor: "pointer" },
   upcomingRowTitle: { fontSize: 14, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
