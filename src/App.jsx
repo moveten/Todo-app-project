@@ -1521,42 +1521,50 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
         <div style={{ width: 30 }} />
       </div>
 
-      {presets.length > 0 && (
-        <div style={{ marginBottom: 4 }}>
-          <div style={styles.tplHeaderRow}>
-            <label style={{ ...styles.formLabel, marginTop: 12 }}>프리셋 불러오기</label>
+      <div style={{ marginBottom: 4 }}>
+        <div style={styles.tplHeaderRow}>
+          <label style={{ ...styles.formLabel, marginTop: 12 }}>프리셋 불러오기</label>
+          {presets.length > 0 && (
             <button onClick={() => setManagePresets(!managePresets)} style={styles.tplManageBtn}>
               {managePresets ? "완료" : "관리"}
             </button>
-          </div>
-          <div style={styles.tplChipRow}>
-            {presets.map((p) => (
-              <div key={p.id} style={styles.tplChipWrap}>
-                <button
-                  onClick={() => (managePresets ? null : applyPreset(p))}
-                  style={{
-                    ...styles.tplChip,
-                    borderColor: appliedPresetId === p.id ? "#1F2937" : "#E5E9EC",
-                    background: appliedPresetId === p.id ? "#1F2937" : "#fff",
-                    color: appliedPresetId === p.id ? "#fff" : "#4A4536",
-                  }}
-                >
-                  {p.name}
-                  <span style={{ opacity: 0.6, fontWeight: 500 }}> · {(p.reminders || []).length}단계</span>
-                </button>
-                {managePresets && (
-                  <button onClick={() => onDeletePreset(p.id)} style={styles.tplDeleteBtn}>
-                    <Trash2 size={12} color="#DC5B45" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          {appliedPresetId && !managePresets && (
-            <div style={styles.tplHint}>프리셋 내용이 채워졌어요. 제목이나 세부 내용은 자유롭게 고쳐보세요.</div>
           )}
         </div>
-      )}
+        {presets.length === 0 ? (
+          <div style={styles.tplHint}>
+            아직 저장된 프리셋이 없어요. 체크리스트나 딸림 일정을 채운 뒤 아래 "프리셋으로 저장"을 누르면 다음부터 여기서 바로 불러올 수 있어요.
+          </div>
+        ) : (
+          <>
+            <div style={styles.tplChipRow}>
+              {presets.map((p) => (
+                <div key={p.id} style={styles.tplChipWrap}>
+                  <button
+                    onClick={() => (managePresets ? null : applyPreset(p))}
+                    style={{
+                      ...styles.tplChip,
+                      borderColor: appliedPresetId === p.id ? "#1F2937" : "#E5E9EC",
+                      background: appliedPresetId === p.id ? "#1F2937" : "#fff",
+                      color: appliedPresetId === p.id ? "#fff" : "#4A4536",
+                    }}
+                  >
+                    {p.name}
+                    <span style={{ opacity: 0.6, fontWeight: 500 }}> · {(p.reminders || []).length}단계</span>
+                  </button>
+                  {managePresets && (
+                    <button onClick={() => onDeletePreset(p.id)} style={styles.tplDeleteBtn}>
+                      <Trash2 size={12} color="#DC5B45" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {appliedPresetId && !managePresets && (
+              <div style={styles.tplHint}>프리셋 내용이 채워졌어요. 제목이나 세부 내용은 자유롭게 고쳐보세요.</div>
+            )}
+          </>
+        )}
+      </div>
 
       <label style={styles.formLabel}>일정명</label>
       <div style={{ position: "relative" }}>
