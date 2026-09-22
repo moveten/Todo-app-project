@@ -1360,9 +1360,9 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
       {item.photos && item.photos.length > 0 && (
         <div style={styles.viewSection}>
           <div style={styles.viewSectionLabel}>사진</div>
-          <div style={styles.photoRow}>
+          <div style={styles.viewPhotoGrid}>
             {item.photos.map((p, idx) => (
-              <img key={idx} src={p} onClick={() => setViewPhoto(p)} style={styles.photoThumb} />
+              <img key={idx} src={p} onClick={() => setViewPhoto(p)} style={styles.viewPhotoThumb} />
             ))}
           </div>
         </div>
@@ -2023,6 +2023,8 @@ const styles = {
   photoRow: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" },
   photoThumbWrap: { position: "relative", width: 54, height: 54 },
   photoThumb: { width: 54, height: 54, borderRadius: 10, objectFit: "cover", border: "1px solid #E5E9EC", cursor: "pointer" },
+  viewPhotoGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 10 },
+  viewPhotoThumb: { width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 14, cursor: "pointer", border: "1px solid #E5E9EC" },
   photoRemoveBtn: { position: "absolute", top: -6, right: -6, background: "#DC5B45", border: "none", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center" },
   photoAddBtn: { width: 54, height: 54, borderRadius: 10, border: "1px dashed #CFC7B4", background: "#F7F8FA", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   photoViewerOverlay: { position: "fixed", inset: 0, background: "rgba(10,8,5,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 20 },
