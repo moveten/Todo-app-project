@@ -214,8 +214,10 @@ function buildTodos(items, today) {
       });
       return;
     }
-    const mainDoneToday = it.done && it.doneDate === today;
-    if ((!it.done && it.date <= today) || mainDoneToday) {
+    // done인데 doneDate가 없는 경우(예전 버전 데이터/버그로 유실된 경우)는
+    // 완료 정보를 아예 잃어버리지 않도록 오늘 완료한 것으로 간주해서 복구함
+    const mainDoneRelevant = it.done && (!it.doneDate || it.doneDate === today);
+    if ((!it.done && it.date <= today) || mainDoneRelevant) {
       todos.push({
         itemId: it.id,
         reminderId: null,
@@ -230,16 +232,16 @@ function buildTodos(items, today) {
         checklist: it.checklist || [],
         note: it.note || "",
         photos: it.photos || [],
-        done: mainDoneToday,
+        done: mainDoneRelevant,
       });
     }
     (it.reminders || []).forEach((r) => {
-      const reminderDoneToday = r.done && r.doneDate === today;
-      if (r.done && !reminderDoneToday) return;
+      const reminderDoneRelevant = r.done && (!r.doneDate || r.doneDate === today);
+      if (r.done && !reminderDoneRelevant) return;
       const direction = r.direction || "before";
       const days = r.days ?? 0;
       const occur = direction === "after" ? addDays(it.date, days) : addDays(it.date, -days);
-      if (occur <= today || reminderDoneToday) {
+      if (occur <= today || reminderDoneRelevant) {
         todos.push({
           itemId: it.id,
           reminderId: r.id,
@@ -253,7 +255,7 @@ function buildTodos(items, today) {
           pinned: !!it.pinned,
           time: it.time || "00:00",
           checklist: r.checklist || [],
-          done: reminderDoneToday,
+          done: reminderDoneRelevant,
         });
       }
     });
