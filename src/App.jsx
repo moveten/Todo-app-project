@@ -1201,6 +1201,7 @@ function ChecklistEditor({ items, onChange }) {
   };
   const toggle = (id) => onChange(items.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)));
   const remove = (id) => onChange(items.filter((i) => i.id !== id));
+  const editText = (id, text) => onChange(items.map((i) => (i.id === id ? { ...i, text } : i)));
 
   return (
     <div>
@@ -1212,9 +1213,11 @@ function ChecklistEditor({ items, onChange }) {
           >
             {i.checked && <Check size={11} color="#fff" />}
           </button>
-          <span style={{ ...styles.checklistEditorText, textDecoration: i.checked ? "line-through" : "none", color: i.checked ? "#9AA3AF" : "#1F2937" }}>
-            {i.text}
-          </span>
+          <input
+            value={i.text}
+            onChange={(e) => editText(i.id, e.target.value)}
+            style={{ ...styles.checklistEditorInput, textDecoration: i.checked ? "line-through" : "none", color: i.checked ? "#9AA3AF" : "#1F2937" }}
+          />
           <button onClick={() => remove(i.id)} style={styles.stepRemoveBtn}>
             <X size={12} color="#A8AFB8" />
           </button>
@@ -1444,6 +1447,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       direction: r.direction || "before",
       label: r.label,
       done: r.done || false,
+      doneDate: r.doneDate || null,
     }))
   );
   const [managePresets, setManagePresets] = useState(false);
@@ -1556,6 +1560,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       recurring,
       lastDoneDate: initialItem?.lastDoneDate || null,
       done: initialItem?.done || false,
+      doneDate: initialItem?.doneDate || null,
       pinned: initialItem?.pinned || false,
       checklist,
       reminders: recurring
@@ -1568,6 +1573,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
               direction: r.direction === "after" ? "after" : "before",
               label: r.label.trim(),
               done: r.done || false,
+              doneDate: r.doneDate || null,
               checklist: [],
             })),
     });
@@ -2052,6 +2058,7 @@ const styles = {
   checkCircleSmall: { width: 20, height: 20, borderRadius: "50%", border: "2px solid #D7DCE1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   checklistEditorRow: { display: "flex", alignItems: "center", gap: 8, padding: "5px 0" },
   checklistEditorText: { flex: 1, fontSize: 15.5 },
+  checklistEditorInput: { flex: 1, fontSize: 15.5, border: "none", outline: "none", background: "transparent", padding: 0 },
   checklistAddRow: { display: "flex", gap: 6, marginTop: 4 },
   checklistAddInput: { flex: 1, border: "1px solid #E5E9EC", borderRadius: 8, padding: "8px 10px", fontSize: 16, background: "#fff" },
   checklistAddBtn: { width: 32, height: 32, borderRadius: 8, background: "#0D9488", border: "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
