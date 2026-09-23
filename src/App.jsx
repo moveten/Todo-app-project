@@ -899,19 +899,29 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
 // ---------- 스와이프 (왼쪽: 수정/삭제, 오른쪽: 고정) ----------
 function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
   const [x, setX] = useState(0);
-  const dragRef = useRef({ startX: 0, dragging: false, moved: false });
+  const dragRef = useRef({ startX: 0, startY: 0, dragging: false, moved: false, lockDir: null });
   const LEFT_OPEN = -144; // 수정 + 삭제
   const RIGHT_OPEN = 72; // 고정
 
   const onTouchStart = (e) => {
     dragRef.current.startX = e.touches[0].clientX;
+    dragRef.current.startY = e.touches[0].clientY;
     dragRef.current.dragging = true;
     dragRef.current.moved = false;
+    dragRef.current.lockDir = null;
     dragRef.current.base = x;
   };
   const onTouchMove = (e) => {
     if (!dragRef.current.dragging) return;
     const dx = e.touches[0].clientX - dragRef.current.startX;
+    const dy = e.touches[0].clientY - dragRef.current.startY;
+    // 스크롤(세로 움직임)인지 스와이프(가로 움직임)인지 방향을 한 번만 판정해서 고정
+    if (!dragRef.current.lockDir) {
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+        dragRef.current.lockDir = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+      }
+    }
+    if (dragRef.current.lockDir === "v") return; // 세로 스크롤 중이면 좌우로는 절대 안 움직이게 둠
     if (Math.abs(dx) > 4) dragRef.current.moved = true;
     let next = dragRef.current.base + dx;
     if (next < LEFT_OPEN) next = LEFT_OPEN + (next - LEFT_OPEN) * 0.2;
@@ -920,6 +930,7 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
   };
   const onTouchEnd = () => {
     dragRef.current.dragging = false;
+    if (dragRef.current.lockDir === "v") return; // 스크롤로 판정된 제스처는 스냅도 하지 않음
     if (x <= LEFT_OPEN / 2) setX(LEFT_OPEN);
     else if (x >= RIGHT_OPEN / 2) setX(RIGHT_OPEN);
     else setX(0);
