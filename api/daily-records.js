@@ -45,10 +45,10 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { date } = req.query || {};
       if (date) {
-        const rows = await sql`SELECT * FROM daily_records WHERE date = ${date}`;
+        const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, updated_at FROM daily_records WHERE date = ${date}`;
         return res.status(200).json(rows[0] || null);
       }
-      const rows = await sql`SELECT * FROM daily_records ORDER BY date DESC LIMIT 100`;
+      const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, updated_at FROM daily_records ORDER BY date DESC LIMIT 100`;
       return res.status(200).json(rows);
     }
 
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
             reflection = ${refJson},
             routines = ${routJson},
             updated_at = NOW()
-        RETURNING *
+        RETURNING to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, updated_at
       `;
       return res.status(200).json(rows[0]);
     }

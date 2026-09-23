@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Check, Loader2, Plus, X, Settings2, Hash } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { ChevronLeft, ChevronRight, Check, Loader2, Plus, X, Settings2, Hash, PenLine, BarChart3 } from "lucide-react";
+import Stats from "./Stats.jsx";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -9,8 +10,8 @@ const addDays = (iso, days) => {
   d.setDate(d.getDate() + days);
   return toISO(d);
 };
-const fmtFull = (iso) => {
-  const d = new Date(iso + "T00:00:00");
+export const fmtFull = (iso) => {
+  const d = new Date(String(iso).slice(0, 10) + "T00:00:00");
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
 };
@@ -23,8 +24,7 @@ const MOODS = [
   { emoji: "😣", label: "힘듦" },
 ];
 
-// 가족이 맨 앞
-const AREAS = [
+export const AREAS = [
   { key: "family", label: "가족", hint: "오늘 가족과 있었던 일" },
   { key: "work", label: "업무", hint: "오늘 업무에서 있었던 일" },
   { key: "self", label: "나", hint: "오늘 나를 위해 한 일, 컨디션" },
@@ -42,12 +42,35 @@ const ROUTINES_KEY = "daily-review:routines";
 const emptyCat = () => ({ text: "", good: "", improve: "", tags: [] });
 const emptyCats = () => ({ family: emptyCat(), work: emptyCat(), self: emptyCat() });
 const emptyForm = () => ({ mood: "🙂", cats: emptyCats(), reflection: {}, routines: {} });
-const isFilled = (c) => Boolean(c.text || c.good || c.improve || c.tags.length);
 
 export default function DailyReview() {
+  const [view, setView] = useState("record");
+  return (
+    <div style={styles.app}>
+      <div style={styles.topBar}>
+        <div style={styles.brandRow}>
+          <span style={styles.brandName}>파워로그</span>
+          <span style={styles.brandSub}>가족과 일, 하나의 기록</span>
+        </div>
+        <div style={styles.viewToggle}>
+          <button style={{ ...styles.viewBtn, ...(view === "record" ? styles.viewBtnOn : {}) }} onClick={() => setView("record")}>
+            <PenLine size={13} style={{ marginRight: 4 }} />
+            기록
+          </button>
+          <button style={{ ...styles.viewBtn, ...(view === "stats" ? styles.viewBtnOn : {}) }} onClick={() => setView("stats")}>
+            <BarChart3 size={13} style={{ marginRight: 4 }} />
+            통계
+          </button>
+        </div>
+      </div>
+      {view === "record" ? <RecordView /> : <Stats />}
+    </div>
+  );
+}
+
+function RecordView() {
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState(emptyForm());
-  const [area, setArea] = useState("family");
   const [routineList, setRoutineList] = useState(DEFAULT_ROUTINES);
   const [editRoutines, setEditRoutines] = useState(false);
   const [newRoutine, setNewRoutine] = useState("");
@@ -94,7 +117,7 @@ export default function DailyReview() {
         setForm({
           mood: row.mood || "🙂",
           cats: { family: pick("family"), work: pick("work"), self: pick("self") },
-          reflection: row.reflection || {}, // 예전 기록의 전체 회고는 지우지 않고 그대로 보존
+          reflection: row.reflection || {},
           routines: row.routines || {},
         });
       } else {
@@ -142,13 +165,7 @@ export default function DailyReview() {
       const res = await fetch("/api/daily-records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          mood: form.mood,
-          categories: form.cats,
-          reflection: form.reflection,
-          routines,
-        }),
+        body: JSON.stringify({ date, mood: form.mood, categories: form.cats, reflection: form.reflection, routines }),
       });
       if (!res.ok) throw new Error("save failed");
       setSavedFlash(true);
@@ -161,15 +178,10 @@ export default function DailyReview() {
   };
 
   const isToday = date === todayISO();
-  const current = AREAS.find((a) => a.key === area);
 
   return (
-    <div style={styles.app}>
+    <>
       <div style={styles.header}>
-        <div style={styles.brandRow}>
-          <span style={styles.brandName}>파워로그</span>
-          <span style={styles.brandSub}>가족과 일, 하나의 기록</span>
-        </div>
         <div style={styles.dateNavRow}>
           <button style={styles.navBtn} onClick={() => setDate(addDays(date, -1))} aria-label="이전 날">
             <ChevronLeft size={18} color="#5B6470" />
@@ -203,33 +215,20 @@ export default function DailyReview() {
           </div>
         ) : (
           <>
-            {/* 영역 탭: 한 번에 하나만 보여서 칸이 적어 보임 */}
-            <div style={styles.tabRow}>
-              {AREAS.map((a) => (
-                <button
-                  key={a.key}
-                  onClick={() => setArea(a.key)}
-                  style={{ ...styles.tabBtn, ...(area === a.key ? styles.tabBtnActive : {}) }}
-                >
-                  {a.label}
-                  {isFilled(form.cats[a.key]) && <span style={styles.tabDot} />}
-                </button>
-              ))}
-            </div>
+            {AREAS.map((a) => (
+              <AreaCard
+                key={a.key}
+                area={a}
+                value={form.cats[a.key]}
+                suggestions={SUGGESTED_TAGS[a.key]}
+                onChange={(patch) => setCat(a.key, patch)}
+                onToggleTag={(t) => toggleTag(a.key, t)}
+              />
+            ))}
 
-            <AreaCard
-              key={area}
-              area={current}
-              value={form.cats[area]}
-              suggestions={SUGGESTED_TAGS[area]}
-              onChange={(patch) => setCat(area, patch)}
-              onToggleTag={(t) => toggleTag(area, t)}
-            />
-
-            {/* 루틴: 한 줄로 간단히 */}
             <div style={styles.section}>
               <div style={styles.sectionHead}>
-                <div style={styles.sectionLabel}>오늘의 루틴</div>
+                <div style={styles.cardTitle}>오늘의 루틴</div>
                 <button style={styles.iconBtn} onClick={() => setEditRoutines((v) => !v)}>
                   <Settings2 size={14} color="#8A93A0" />
                   <span style={styles.iconBtnText}>{editRoutines ? "완료" : "편집"}</span>
@@ -288,10 +287,11 @@ export default function DailyReview() {
                   const r = row.routines || {};
                   const total = Object.keys(r).length;
                   const done = Object.values(r).filter(Boolean).length;
+                  const d = String(row.date).slice(0, 10);
                   return (
-                    <button key={row.date} style={{ ...styles.historyRow, ...(row.date === date ? styles.historyRowActive : {}) }} onClick={() => setDate(row.date)}>
+                    <button key={d} style={{ ...styles.historyRow, ...(d === date ? styles.historyRowActive : {}) }} onClick={() => setDate(d)}>
                       <span style={styles.historyMood}>{row.mood || "🙂"}</span>
-                      <span style={styles.historyDate}>{fmtFull(row.date)}</span>
+                      <span style={styles.historyDate}>{fmtFull(d)}</span>
                       {total > 0 && <span style={styles.historyRoutine}>루틴 {done}/{total}</span>}
                     </button>
                   );
@@ -301,7 +301,28 @@ export default function DailyReview() {
           </>
         )}
       </div>
-    </div>
+    </>
+  );
+}
+
+// 내용 길이에 맞춰 높이가 자동으로 늘어나는 입력칸 (빈 칸일 땐 한 줄로 작게)
+function AutoTextarea({ value, onChange, placeholder, minRows = 1, style }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={minRows}
+      style={{ ...styles.autoInput, ...style }}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }
 
@@ -317,20 +338,32 @@ function AreaCard({ area, value, suggestions, onChange, onToggleTag }) {
 
   return (
     <div style={styles.section}>
-      <Field label="📝 있었던 일" placeholder={area.hint} value={value.text} onChange={(v) => onChange({ text: v })} rows={3} />
-      <Field label="👍 잘한 일" color="#4F46E5" placeholder="잘 해낸 것" value={value.good} onChange={(v) => onChange({ good: v })} />
-      <Field label="🔧 보완할 일" color="#C27C0E" placeholder="다음엔 이렇게 해보고 싶은 것" value={value.improve} onChange={(v) => onChange({ improve: v })} />
-
-      {/* 태그: 평소엔 선택한 것만, 누르면 펼쳐짐 */}
-      <div style={styles.tagBar}>
-        {value.tags.map((t) => (
-          <span key={t} style={{ ...styles.tagChip, ...styles.tagChipOn }}>#{t}</span>
-        ))}
+      <div style={styles.sectionHead}>
+        <div style={styles.cardTitle}>{area.label}</div>
         <button style={styles.tagToggle} onClick={() => setShowTags((v) => !v)}>
-          <Hash size={12} style={{ marginRight: 3 }} />
-          {showTags ? "닫기" : value.tags.length ? "태그 수정" : "태그 추가"}
+          <Hash size={12} style={{ marginRight: 2 }} />
+          {showTags ? "닫기" : "태그"}
         </button>
       </div>
+
+      <AutoTextarea value={value.text} onChange={(v) => onChange({ text: v })} placeholder={area.hint} minRows={2} />
+
+      <div style={styles.lineRow}>
+        <span style={{ ...styles.lineBadge, ...styles.goodBadge }}>잘한 점</span>
+        <AutoTextarea value={value.good} onChange={(v) => onChange({ good: v })} placeholder="잘 해낸 것" style={styles.lineInput} />
+      </div>
+      <div style={styles.lineRow}>
+        <span style={{ ...styles.lineBadge, ...styles.improveBadge }}>보완할 점</span>
+        <AutoTextarea value={value.improve} onChange={(v) => onChange({ improve: v })} placeholder="다음엔 이렇게" style={styles.lineInput} />
+      </div>
+
+      {value.tags.length > 0 && !showTags && (
+        <div style={styles.chipWrap}>
+          {value.tags.map((t) => (
+            <span key={t} style={{ ...styles.tagChip, ...styles.tagChipOn }}>#{t}</span>
+          ))}
+        </div>
+      )}
       {showTags && (
         <div style={styles.tagPanel}>
           <div style={styles.chipWrap}>
@@ -360,21 +393,16 @@ function AreaCard({ area, value, suggestions, onChange, onToggleTag }) {
   );
 }
 
-function Field({ label, placeholder, value, onChange, rows = 2, color = "#5B6470" }) {
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ ...styles.fieldLabel, color }}>{label}</div>
-      <textarea style={styles.fieldInput} rows={rows} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}
-
-const styles = {
+export const styles = {
   app: { minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", color: "#1F2937" },
-  header: { padding: "18px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
-  brandRow: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 },
-  brandName: { fontSize: 15, fontWeight: 800, color: "#4F46E5", letterSpacing: 0.3 },
-  brandSub: { fontSize: 11.5, color: "#9AA3AF", fontWeight: 600 },
+  topBar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px", background: "#FFFFFF" },
+  brandRow: { display: "flex", flexDirection: "column" },
+  brandName: { fontSize: 16, fontWeight: 800, color: "#4F46E5", letterSpacing: 0.3 },
+  brandSub: { fontSize: 11, color: "#9AA3AF", fontWeight: 600, marginTop: 1 },
+  viewToggle: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 3, gap: 2 },
+  viewBtn: { display: "flex", alignItems: "center", border: "none", background: "transparent", color: "#8A93A0", fontSize: 13, fontWeight: 700, padding: "7px 12px", borderRadius: 8 },
+  viewBtnOn: { background: "#FFFFFF", color: "#4F46E5", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
+  header: { padding: "6px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
   dateNavRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   navBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   dateWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
@@ -385,23 +413,22 @@ const styles = {
   moodBtn: { fontSize: 22, background: "#F0F2F4", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" },
   moodBtnActive: { background: "#EEF0FF", boxShadow: "0 0 0 2px #4F46E5 inset" },
   moodLabel: { fontSize: 11, color: "#9AA3AF", fontWeight: 600 },
-  body: { flex: 1, padding: "16px 16px 60px" },
+  body: { flex: 1, padding: "14px 16px 60px" },
   loadingWrap: { display: "flex", justifyContent: "center", padding: "60px 0" },
-  tabRow: { display: "flex", background: "#ECEEF1", borderRadius: 12, padding: 3, gap: 2, marginBottom: 10 },
-  tabBtn: { flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0", borderRadius: 9, border: "none", background: "transparent", color: "#8A93A0", fontSize: 14, fontWeight: 700 },
-  tabBtnActive: { background: "#FFFFFF", color: "#4F46E5", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
-  tabDot: { width: 6, height: 6, borderRadius: "50%", background: "#4F46E5", marginLeft: 5 },
-  section: { background: "#FFFFFF", borderRadius: 14, padding: "14px 14px 12px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
-  sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  sectionLabel: { fontSize: 13, fontWeight: 700, color: "#5B6470" },
-  fieldLabel: { fontSize: 12.5, fontWeight: 700, marginBottom: 4 },
-  fieldInput: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "8px 10px", outline: "none", fontSize: 16, color: "#1F2937", background: "#FAFBFC", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
+  section: { background: "#FFFFFF", borderRadius: 14, padding: "12px 14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
+  sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  cardTitle: { fontSize: 15, fontWeight: 800, color: "#1F2937" },
+  autoInput: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "8px 10px", outline: "none", fontSize: 16, color: "#1F2937", background: "#FAFBFC", resize: "none", fontFamily: "inherit", lineHeight: 1.45, overflow: "hidden" },
+  lineRow: { display: "flex", alignItems: "flex-start", gap: 8, marginTop: 6 },
+  lineBadge: { flexShrink: 0, width: 62, textAlign: "center", fontSize: 11.5, fontWeight: 800, padding: "10px 0", borderRadius: 8 },
+  goodBadge: { background: "#EEF0FF", color: "#4F46E5" },
+  improveBadge: { background: "#FDF3DC", color: "#B06A00" },
+  lineInput: { flex: 1, width: "auto", minWidth: 0 },
   iconBtn: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0 },
   iconBtnText: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
-  tagBar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 },
-  tagToggle: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "5px 10px", fontSize: 12, fontWeight: 700, color: "#5B6470" },
-  tagPanel: { marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E5E9EC" },
-  chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  tagToggle: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#5B6470" },
+  tagPanel: { marginTop: 8, paddingTop: 6, borderTop: "1px dashed #E5E9EC" },
+  chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 },
   tagChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20 },
   tagChipOn: { background: "#EEF0FF", borderColor: "#C7CCFF", color: "#4F46E5" },
   routineChip: { display: "inline-flex", alignItems: "center", border: "1px solid #E5E9EC", background: "#fff", color: "#5B6470", fontSize: 13.5, fontWeight: 600, padding: "8px 14px", borderRadius: 20 },
