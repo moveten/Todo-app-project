@@ -370,6 +370,11 @@ function AutoTextarea({ value, onChange, placeholder, minRows = 1, style, bullet
 
   const process = (prev, raw, pos) => {
     if (!bullet) return onChange(raw);
+    // 전부 지웠으면 입력 중인 칸에 "• "를 다시 넣어둠 (다시 쓸 때도 글머리표가 붙도록)
+    if (raw === "" || raw === "•") {
+      caretRef.current = BULLET.length;
+      return onChange(BULLET);
+    }
     const [v, p] = applyBullets(prev, raw, pos);
     if (v !== raw) caretRef.current = p; // 우리가 글자를 바꿨을 때만 커서 위치 조정
     onChange(v);
