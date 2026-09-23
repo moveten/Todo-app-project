@@ -16,6 +16,7 @@ async function ensureSchema(sql) {
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS mood_score INTEGER`;
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS routines JSONB DEFAULT '{}'::jsonb`;
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`;
+  await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS advice TEXT`;
   // 이미 저장된 과거 기록도 기분 점수를 채워서 통계에 포함되게 함
   await sql`
     UPDATE daily_records SET mood_score = CASE mood
@@ -45,15 +46,15 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { date } = req.query || {};
       if (date) {
-        const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, updated_at FROM daily_records WHERE date = ${date}`;
+        const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, updated_at FROM daily_records WHERE date = ${date}`;
         return res.status(200).json(rows[0] || null);
       }
-      const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, updated_at FROM daily_records ORDER BY date DESC LIMIT 100`;
+      const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, updated_at FROM daily_records ORDER BY date DESC LIMIT 100`;
       return res.status(200).json(rows);
     }
 
     if (req.method === 'POST') {
-      const { date, mood, categories, reflection, routines } = req.body || {};
+      const { date, mood, categories, reflection, routines, advice } = req.body || {};
       if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
 
       const moodScore = MOOD_SCORES[mood] ?? null;
@@ -79,16 +80,17 @@ export default async function handler(req, res) {
       const routJson = JSON.stringify(cleanRoutines);
 
       const rows = await sql`
-        INSERT INTO daily_records (date, mood, mood_score, categories, reflection, routines, updated_at)
-        VALUES (${date}, ${mood || null}, ${moodScore}, ${catJson}, ${refJson}, ${routJson}, NOW())
+        INSERT INTO daily_records (date, mood, mood_score, categories, reflection, routines, advice, updated_at)
+        VALUES (${date}, ${mood || null}, ${moodScore}, ${catJson}, ${refJson}, ${routJson}, ${advice || null}, NOW())
         ON CONFLICT (date) DO UPDATE
         SET mood = ${mood || null},
             mood_score = ${moodScore},
             categories = ${catJson},
             reflection = ${refJson},
             routines = ${routJson},
+            advice = ${advice || null},
             updated_at = NOW()
-        RETURNING to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, updated_at
+        RETURNING to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, updated_at
       `;
       return res.status(200).json(rows[0]);
     }
