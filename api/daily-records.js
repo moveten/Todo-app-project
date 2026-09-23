@@ -62,6 +62,8 @@ export default async function handler(req, res) {
       for (const k of ['work', 'family', 'self']) {
         cleanCats[k] = {
           text: (cat[k] && cat[k].text) || '',
+          good: (cat[k] && cat[k].good) || '',
+          improve: (cat[k] && cat[k].improve) || '',
           tags: cleanTags(cat[k] && cat[k].tags),
         };
       }

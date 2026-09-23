@@ -32,11 +32,8 @@ const SUGGESTED_TAGS = {
 const DEFAULT_ROUTINES = ["운동", "독서", "일찍 자기", "물 충분히"];
 const ROUTINES_KEY = "daily-review:routines";
 
-const emptyCats = () => ({
-  work: { text: "", tags: [] },
-  family: { text: "", tags: [] },
-  self: { text: "", tags: [] },
-});
+const emptyCat = () => ({ text: "", good: "", improve: "", tags: [] });
+const emptyCats = () => ({ work: emptyCat(), family: emptyCat(), self: emptyCat() });
 const emptyForm = () => ({ mood: "🙂", cats: emptyCats(), good: "", improve: "", routines: {} });
 
 export default function DailyReview() {
@@ -82,7 +79,12 @@ export default function DailyReview() {
       const row = await res.json();
       if (row && row.categories) {
         const c = row.categories;
-        const pick = (k) => ({ text: (c[k] && c[k].text) || "", tags: (c[k] && c[k].tags) || [] });
+        const pick = (k) => ({
+          text: (c[k] && c[k].text) || "",
+          good: (c[k] && c[k].good) || "",
+          improve: (c[k] && c[k].improve) || "",
+          tags: (c[k] && c[k].tags) || [],
+        });
         setForm({
           mood: row.mood || "🙂",
           cats: { work: pick("work"), family: pick("family"), self: pick("self") },
@@ -202,6 +204,34 @@ export default function DailyReview() {
           </div>
         ) : (
           <>
+            <CategorySection
+              label="가족"
+              placeholder="오늘 가족과 있었던 일"
+              value={form.cats.family}
+              suggestions={SUGGESTED_TAGS.family}
+              onText={(v) => setCat("family", { text: v })}
+              onToggleTag={(t) => toggleTag("family", t)}
+            />
+            <CategorySection
+              label="업무"
+              placeholder="오늘 업무에서 있었던 일"
+              reflect
+              onGood={(v) => setCat("work", { good: v })}
+              onImprove={(v) => setCat("work", { improve: v })}
+              value={form.cats.work}
+              suggestions={SUGGESTED_TAGS.work}
+              onText={(v) => setCat("work", { text: v })}
+              onToggleTag={(t) => toggleTag("work", t)}
+            />
+            <CategorySection
+              label="나"
+              placeholder="오늘 나를 위해 한 일, 컨디션"
+              value={form.cats.self}
+              suggestions={SUGGESTED_TAGS.self}
+              onText={(v) => setCat("self", { text: v })}
+              onToggleTag={(t) => toggleTag("self", t)}
+            />
+
             {/* 루틴 체크 */}
             <div style={styles.section}>
               <div style={styles.sectionHead}>
@@ -258,39 +288,14 @@ export default function DailyReview() {
               )}
             </div>
 
-            <CategorySection
-              label="업무"
-              placeholder="오늘 업무에서 있었던 일"
-              value={form.cats.work}
-              suggestions={SUGGESTED_TAGS.work}
-              onText={(v) => setCat("work", { text: v })}
-              onToggleTag={(t) => toggleTag("work", t)}
-            />
-            <CategorySection
-              label="가족"
-              placeholder="오늘 가족과 있었던 일"
-              value={form.cats.family}
-              suggestions={SUGGESTED_TAGS.family}
-              onText={(v) => setCat("family", { text: v })}
-              onToggleTag={(t) => toggleTag("family", t)}
-            />
-            <CategorySection
-              label="나"
-              placeholder="오늘 나를 위해 한 일, 컨디션"
-              value={form.cats.self}
-              suggestions={SUGGESTED_TAGS.self}
-              onText={(v) => setCat("self", { text: v })}
-              onToggleTag={(t) => toggleTag("self", t)}
-            />
-
             <TextSection
-              label="잘한 점"
-              placeholder="오늘 스스로 잘했다고 느낀 점"
+              label="오늘 하루 잘한 점"
+              placeholder="업무 외에 스스로 잘했다고 느낀 점"
               value={form.good}
               onChange={(v) => setForm((f) => ({ ...f, good: v }))}
             />
             <TextSection
-              label="보완할 점"
+              label="오늘 하루 보완할 점"
               placeholder="다음엔 이렇게 해보면 좋겠다 싶은 점"
               value={form.improve}
               onChange={(v) => setForm((f) => ({ ...f, improve: v }))}
@@ -340,7 +345,7 @@ export default function DailyReview() {
   );
 }
 
-function CategorySection({ label, placeholder, value, suggestions, onText, onToggleTag }) {
+function CategorySection({ label, placeholder, value, suggestions, onText, onToggleTag, reflect, onGood, onImprove }) {
   const [custom, setCustom] = useState("");
   // 추천 태그 + 내가 직접 추가한 태그를 함께 보여줌
   const allTags = [...suggestions, ...value.tags.filter((t) => !suggestions.includes(t))];
@@ -359,6 +364,26 @@ function CategorySection({ label, placeholder, value, suggestions, onText, onTog
         value={value.text}
         onChange={(e) => onText(e.target.value)}
       />
+      {reflect && (
+        <>
+          <div style={styles.subLabelGood}>👍 잘한 일</div>
+          <textarea
+            style={styles.subTextarea}
+            rows={2}
+            placeholder="업무에서 잘 해낸 것"
+            value={value.good}
+            onChange={(e) => onGood(e.target.value)}
+          />
+          <div style={styles.subLabelImprove}>🔧 보완할 일</div>
+          <textarea
+            style={styles.subTextarea}
+            rows={2}
+            placeholder="다음엔 이렇게 해보면 좋겠다 싶은 것"
+            value={value.improve}
+            onChange={(e) => onImprove(e.target.value)}
+          />
+        </>
+      )}
       <div style={styles.chipWrap}>
         {allTags.map((t) => (
           <button
@@ -424,6 +449,9 @@ const styles = {
   iconBtn: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0 },
   iconBtnText: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
   textarea: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", fontSize: 16, color: "#1F2937", background: "transparent", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
+  subLabelGood: { fontSize: 12, fontWeight: 700, color: "#0D9488", marginTop: 8, marginBottom: 4 },
+  subLabelImprove: { fontSize: 12, fontWeight: 700, color: "#C27C0E", marginTop: 8, marginBottom: 4 },
+  subTextarea: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "8px 10px", outline: "none", fontSize: 16, color: "#1F2937", background: "#FAFBFC", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
   tagChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20 },
   tagChipOn: { background: "#EAF6F4", borderColor: "#BFE5DF", color: "#0D9488" },
