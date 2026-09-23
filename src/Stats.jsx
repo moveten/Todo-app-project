@@ -80,9 +80,10 @@ export default function Stats() {
         <div style={s.empty}>이 기간에 저장된 기록이 없어요. 기록이 쌓이면 여기에 통계가 나타나요.</div>
       ) : (
         <>
-          <Summary summary={data.summary} />
+          <Summary summary={data.summary} routines={data.routines || []} />
           <AreaScores items={data.areaScores || []} />
           <Plans plans={data.plans} />
+          <Checks routines={data.routines || []} />
           <MoodTrend points={data.moodTrend} />
           <Weekday weekday={data.weekday} />
           <Tags tagsByArea={data.tagsByArea} />
@@ -104,7 +105,10 @@ function Card({ title, sub, children }) {
   );
 }
 
-function Summary({ summary }) {
+function Summary({ summary, routines }) {
+  const done = routines.reduce((a, r) => a + r.done, 0);
+  const total = routines.reduce((a, r) => a + r.total, 0);
+  const rate = total ? Math.round((done / total) * 100) : null;
   return (
     <div style={s.summaryRow}>
       <div style={s.summaryBox}>
@@ -116,6 +120,10 @@ function Summary({ summary }) {
           {moodEmoji(summary.avgMood)} {summary.avgMood ?? "–"}
         </div>
         <div style={s.summaryLabel}>평균 기분 (5점)</div>
+      </div>
+      <div style={s.summaryBox}>
+        <div style={s.summaryNum}>{rate == null ? "–" : `${rate}%`}</div>
+        <div style={s.summaryLabel}>체크리스트</div>
       </div>
     </div>
   );
@@ -254,6 +262,27 @@ function Plans({ plans }) {
       ) : (
         <div style={s.hint}>다음 날 "했어요/못했어요"를 체크하면 실행률이 나타나요.</div>
       )}
+    </Card>
+  );
+}
+
+function Checks({ routines }) {
+  if (!routines.length) return null;
+  return (
+    <Card title="체크리스트 달성률" sub="자주 해낸 순서예요">
+      {routines.map((r) => (
+        <div key={r.name} style={s.progRow}>
+          <div style={s.progHead}>
+            <span style={s.progName}>{r.name}</span>
+            <span style={s.progNum}>
+              {r.done}/{r.total}일 · <b style={{ color: INDIGO }}>{r.rate}%</b>
+            </span>
+          </div>
+          <div style={s.progTrack}>
+            <div style={{ ...s.progFill, width: `${r.rate}%` }} />
+          </div>
+        </div>
+      ))}
     </Card>
   );
 }

@@ -28,7 +28,7 @@ const MOODS = [
 export const AREAS = [
   { key: "family", label: "가족", hint: "오늘 가족과 있었던 일" },
   { key: "work", label: "업무", hint: "오늘 업무에서 있었던 일" },
-  { key: "self", label: "나", hint: "오늘 나를 위해 한 일, 컨디션" },
+  { key: "self", label: "나", hint: "오늘 나에 대해 한 줄 (컨디션, 느낀 점 등)", simple: true },
 ];
 
 const SUGGESTED_TAGS = {
@@ -38,6 +38,16 @@ const SUGGESTED_TAGS = {
 };
 
 const ABOUT_KEY = "powerlog:about";
+const CHECK_KEY = "powerlog:checklist";
+const DEFAULT_CHECKLIST = [
+  "푸쉬업하기",
+  "스쿼트하기",
+  "아이들 꼭 안아주기",
+  "가족에게 고맙다고 말하기",
+  "미룬 일 하나 바로 처리하기",
+  "누군가를 존중하는 말 한마디",
+  "12시 전에 자기",
+];
 const DEFAULT_ABOUT = `성향: 걱정이 많고 불안이 심한 편이에요. 쉽게 주눅들고, 귀찮아하는 경향이 있어요.
 
 살면서 도움이 됐던 원칙:
@@ -157,6 +167,31 @@ function RecordView() {
   const [missing, setMissing] = useState([]); // 만족도를 안 고른 영역
   const [about, setAbout] = useState(DEFAULT_ABOUT); // 조언에 항상 반영할 "나에 대해"
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [checklist, setChecklist] = useState(DEFAULT_CHECKLIST);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/backup?key=${encodeURIComponent(CHECK_KEY)}`);
+        const row = await res.json();
+        if (row && row.data) {
+          const list = JSON.parse(row.data);
+          if (Array.isArray(list)) setChecklist(list);
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  const saveChecklist = (list) => {
+    setChecklist(list);
+    fetch("/api/backup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify(list) }),
+    }).catch(() => {});
+  };
+
+  const toggleCheck = (name) => setForm((f) => ({ ...f, routines: { ...f.routines, [name]: !f.routines[name] } }));
   const [aboutSaved, setAboutSaved] = useState(false);
 
   useEffect(() => {
@@ -211,7 +246,7 @@ function RecordView() {
           mood: form.mood,
           categories,
           reflection: form.reflection,
-          routines: form.routines,
+          routines: Object.fromEntries(checklist.map((c) => [c, Boolean(form.routines[c])])),
           advice: (form.advice || "").trim(),
           plan: (form.plan || "").trim(),
         }),
@@ -250,7 +285,7 @@ function RecordView() {
 
   const askClaude = () => {
     if (!checkScores()) return;
-    const text = buildPrompt(date, form, history, about);
+    const text = buildPrompt(date, form, history, about, checklist);
     save();
     copyText(text).then((ok) => showToast(ok ? "복사됐어요! Claude에 붙여넣기 하세요" : "복사에 실패했어요. 다시 눌러주세요"));
     window.open("https://claude.ai/new", "_blank");
@@ -324,6 +359,8 @@ function RecordView() {
               <AreaCard key={a.key} area={a} value={form.cats[a.key]} missing={missing.includes(a.key)} onChange={(patch) => setCat(a.key, patch)} />
             ))}
 
+            <Checklist items={checklist} checked={form.routines} onToggle={toggleCheck} onSaveList={saveChecklist} />
+
             <TagPicker cats={form.cats} onToggle={toggleTag} />
 
             <button style={styles.saveBtn} onClick={save} disabled={saving}>
@@ -392,7 +429,7 @@ function RecordView() {
           </>
         )}
       </div>
-      {showPage && <OnePage date={date} form={form} onClose={() => setShowPage(false)} />}
+      {showPage && <OnePage date={date} form={form} checklist={checklist} onClose={() => setShowPage(false)} />}
       {toast && <div style={styles.toast}>{toast}</div>}
     </>
   );
@@ -506,20 +543,71 @@ function AreaCard({ area, value, onChange, missing }) {
           ))}
         </div>
       </div>
-      <AutoTextarea value={value.text} onChange={(v) => onChange({ text: v })} placeholder={area.hint} minRows={2} />
-      <div style={styles.lineRow}>
-        <span style={{ ...styles.lineBadge, ...styles.goodBadge }}>잘한 점</span>
-        <AutoTextarea value={value.good} onChange={(v) => onChange({ good: v })} placeholder="잘 해낸 것" style={styles.lineInput} />
-      </div>
-      <div style={styles.lineRow}>
-        <span style={{ ...styles.lineBadge, ...styles.improveBadge }}>보완할 점</span>
-        <AutoTextarea value={value.improve} onChange={(v) => onChange({ improve: v })} placeholder="다음엔 이렇게" style={styles.lineInput} />
-      </div>
+      <AutoTextarea value={value.text} onChange={(v) => onChange({ text: v })} placeholder={area.hint} minRows={area.simple ? 1 : 2} />
+      {!area.simple && (
+        <>
+          <div style={styles.lineRow}>
+            <span style={{ ...styles.lineBadge, ...styles.goodBadge }}>잘한 점</span>
+            <AutoTextarea value={value.good} onChange={(v) => onChange({ good: v })} placeholder="잘 해낸 것" style={styles.lineInput} />
+          </div>
+          <div style={styles.lineRow}>
+            <span style={{ ...styles.lineBadge, ...styles.improveBadge }}>보완할 점</span>
+            <AutoTextarea value={value.improve} onChange={(v) => onChange({ improve: v })} placeholder="다음엔 이렇게" style={styles.lineInput} />
+          </div>
+        </>
+      )}
       {value.tags.length > 0 && (
         <div style={styles.chipWrap}>
           {value.tags.map((t) => (
             <span key={t} style={styles.tagMini}>#{t}</span>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 체크리스트: 나에게 도움이 되는 작은 행동들. 탭 한 번으로 체크
+function Checklist({ items, checked, onToggle, onSaveList }) {
+  const [edit, setEdit] = useState(false);
+  const [draft, setDraft] = useState("");
+  const done = items.filter((i) => checked[i]).length;
+  const add = () => {
+    const v = draft.trim();
+    if (v && !items.includes(v)) onSaveList([...items, v]);
+    setDraft("");
+  };
+  return (
+    <div style={styles.section}>
+      <div style={styles.sectionHead}>
+        <div style={styles.cardTitle}>
+          오늘의 체크리스트 <span style={styles.checkCount}>{done}/{items.length}</span>
+        </div>
+        <button style={styles.editBtn} onClick={() => setEdit((e) => !e)}>
+          {edit ? "완료" : "편집"}
+        </button>
+      </div>
+      {items.map((it) =>
+        edit ? (
+          <div key={it} style={styles.checkRow}>
+            <span style={{ flex: 1, fontSize: 14.5 }}>{it}</span>
+            <button style={styles.checkDel} onClick={() => onSaveList(items.filter((x) => x !== it))} aria-label={`${it} 삭제`}>
+              <X size={14} color="#DC5B45" />
+            </button>
+          </div>
+        ) : (
+          <button key={it} style={styles.checkRow} onClick={() => onToggle(it)}>
+            <span style={{ ...styles.checkBox, ...(checked[it] ? styles.checkBoxOn : {}) }}>{checked[it] && <Check size={14} color="#fff" />}</span>
+            <span style={{ ...styles.checkText, ...(checked[it] ? styles.checkTextOn : {}) }}>{it}</span>
+          </button>
+        )
+      )}
+      {edit && (
+        <div style={styles.addRow}>
+          <input style={styles.addInput} placeholder="새 항목 (예: 산책 20분)" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          <button style={styles.addBtn} onClick={add} aria-label="항목 추가">
+            <Plus size={15} color="#fff" />
+          </button>
         </div>
       )}
     </div>
@@ -591,7 +679,7 @@ function extractPlan(advice) {
   return t;
 }
 
-function buildPrompt(date, form, history, about) {
+function buildPrompt(date, form, history, about, checklist = []) {
   const lines = [];
   lines.push(`[파워로그] ${fmtFull(date)} 하루 기록이에요. 아래 기록을 보고 조언해주세요.`);
   lines.push("");
@@ -606,6 +694,10 @@ function buildPrompt(date, form, history, about) {
     if (c.improve) lines.push(`보완할 점:\n${c.improve}`);
     if (c.tags.length) lines.push(`태그: ${c.tags.map((t) => "#" + t).join(" ")}`);
   });
+  if (checklist.length) {
+    lines.push("");
+    lines.push(`체크리스트: ${checklist.map((c) => `${form.routines[c] ? "✅" : "⬜"} ${c}`).join(", ")}`);
+  }
   const recent = (history || []).filter((r) => String(r.date).slice(0, 10) < date).slice(0, 6);
   if (recent.length) {
     lines.push("");
@@ -676,7 +768,7 @@ function Lines({ text }) {
     ));
 }
 
-function OnePage({ date, form, onClose }) {
+function OnePage({ date, form, checklist = [], onClose }) {
   const ref = useRef(null);
   const [busy, setBusy] = useState(false);
   const areas = AREAS.filter((a) => {
@@ -764,6 +856,24 @@ function OnePage({ date, form, onClose }) {
               </div>
             );
           })}
+          {checklist.length > 0 && (
+            <div style={page.block}>
+              <div style={page.blockHead}>
+                <span style={page.blockTitle}>체크리스트</span>
+                <span style={page.score}>
+                  {checklist.filter((c) => form.routines[c]).length}/{checklist.length}
+                </span>
+              </div>
+              <div style={page.checkWrap}>
+                {checklist.map((c) => (
+                  <span key={c} style={{ ...page.checkItem, ...(form.routines[c] ? page.checkItemOn : {}) }}>
+                    {form.routines[c] ? "✓ " : ""}
+                    {c}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {advice && (
             <div style={page.adviceBox}>
               <div style={page.adviceTitle}>Claude 조언</div>
@@ -812,6 +922,9 @@ const page = {
   goodBadge: { background: "#EEF0FF", color: "#4F46E5" },
   improveBadge: { background: "#FDF3DC", color: "#B06A00" },
   tags: { fontSize: 12, color: "#4F46E5", fontWeight: 600, marginTop: 8 },
+  checkWrap: { display: "flex", flexWrap: "wrap", gap: 6 },
+  checkItem: { fontSize: 12.5, color: "#9AA3AF", border: "1px solid #EEF1F3", borderRadius: 14, padding: "3px 9px" },
+  checkItemOn: { color: "#4F46E5", background: "#EEF0FF", border: "1px solid #C7CCFF", fontWeight: 700 },
   adviceBox: { marginTop: 16, background: "#F7F7FF", borderRadius: 12, padding: "14px 14px 10px" },
   adviceTitle: { fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 6 },
   adviceHead: { fontSize: 13.5, fontWeight: 800, lineHeight: 1.6, marginTop: 8 },
@@ -866,6 +979,14 @@ export const styles = {
   lineInput: { flex: 1, width: "auto", minWidth: 0 },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 },
   tagMini: { fontSize: 12, color: "#4F46E5", fontWeight: 600 },
+  checkCount: { fontSize: 12.5, color: "#4F46E5", fontWeight: 800, marginLeft: 4 },
+  editBtn: { border: "none", background: "#F0F2F4", color: "#5B6470", fontSize: 12, fontWeight: 700, padding: "5px 10px", borderRadius: 14 },
+  checkRow: { width: "100%", display: "flex", alignItems: "center", gap: 10, border: "none", background: "none", padding: "9px 2px", borderTop: "1px solid #F3F4F6", textAlign: "left" },
+  checkBox: { width: 22, height: 22, borderRadius: 7, border: "2px solid #D7DCE1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  checkBoxOn: { background: "#4F46E5", border: "2px solid #4F46E5" },
+  checkText: { fontSize: 14.5, color: "#1F2937" },
+  checkTextOn: { color: "#9AA3AF", textDecoration: "line-through" },
+  checkDel: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
   tagMainBtn: { width: "100%", display: "flex", alignItems: "center", border: "none", background: "none", padding: "4px 0", fontSize: 14.5, fontWeight: 800, color: "#1F2937" },
   tagGroup: { paddingTop: 10, marginTop: 6, borderTop: "1px solid #F1F3F5" },
   tagGroupLabel: { fontSize: 12, fontWeight: 800, color: "#5B6470" },
