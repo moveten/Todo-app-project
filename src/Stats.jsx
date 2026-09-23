@@ -80,10 +80,9 @@ export default function Stats() {
         <div style={s.empty}>이 기간에 저장된 기록이 없어요. 기록이 쌓이면 여기에 통계가 나타나요.</div>
       ) : (
         <>
-          <Summary summary={data.summary} routines={data.routines} />
+          <Summary summary={data.summary} />
           <MoodTrend points={data.moodTrend} />
           <Weekday weekday={data.weekday} />
-          <Routines routines={data.routines} />
           <Tags tagsByArea={data.tagsByArea} />
           <TagMood tagMood={data.tagMood} />
           <Reflections items={data.reflections} />
@@ -103,10 +102,7 @@ function Card({ title, sub, children }) {
   );
 }
 
-function Summary({ summary, routines }) {
-  const totalDone = routines.reduce((a, r) => a + r.done, 0);
-  const total = routines.reduce((a, r) => a + r.total, 0);
-  const rate = total ? Math.round((totalDone / total) * 100) : null;
+function Summary({ summary }) {
   return (
     <div style={s.summaryRow}>
       <div style={s.summaryBox}>
@@ -118,10 +114,6 @@ function Summary({ summary, routines }) {
           {moodEmoji(summary.avgMood)} {summary.avgMood ?? "–"}
         </div>
         <div style={s.summaryLabel}>평균 기분 (5점)</div>
-      </div>
-      <div style={s.summaryBox}>
-        <div style={s.summaryNum}>{rate == null ? "–" : `${rate}%`}</div>
-        <div style={s.summaryLabel}>루틴 달성률</div>
       </div>
     </div>
   );
@@ -189,27 +181,6 @@ function Weekday({ weekday }) {
           );
         })}
       </div>
-    </Card>
-  );
-}
-
-function Routines({ routines }) {
-  if (!routines.length) return null;
-  return (
-    <Card title="루틴 달성률">
-      {routines.map((r) => (
-        <div key={r.name} style={s.progRow}>
-          <div style={s.progHead}>
-            <span style={s.progName}>{r.name}</span>
-            <span style={s.progNum}>
-              {r.done}/{r.total}일 · <b style={{ color: INDIGO }}>{r.rate}%</b>
-            </span>
-          </div>
-          <div style={s.progTrack}>
-            <div style={{ ...s.progFill, width: `${r.rate}%` }} />
-          </div>
-        </div>
-      ))}
     </Card>
   );
 }
@@ -335,8 +306,8 @@ const s = {
   relDiff: { fontSize: 13.5, fontWeight: 800 },
   filterRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 10, marginBottom: 6 },
   filterBtn: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 700, padding: "5px 11px", borderRadius: 20 },
-  filterGoodOn: { background: "#EEF0FF", borderColor: "#C7CCFF", color: INDIGO },
-  filterImproveOn: { background: "#FDF3DC", borderColor: "#F3DDA6", color: "#B06A00" },
+  filterGoodOn: { background: "#EEF0FF", border: "1px solid #C7CCFF", color: INDIGO },
+  filterImproveOn: { background: "#FDF3DC", border: "1px solid #F3DDA6", color: "#B06A00" },
   areaBtn: { border: "none", background: "transparent", color: "#9AA3AF", fontSize: 12, fontWeight: 700, padding: "4px 4px" },
   areaBtnOn: { color: "#1F2937", textDecoration: "underline", textUnderlineOffset: 3 },
   refRow: { padding: "9px 0", borderBottom: "1px solid #F3F4F6" },

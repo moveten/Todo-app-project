@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Check, Loader2, Plus, X, Settings2, Hash, PenLine, BarChart3 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Loader2, Plus, Hash, PenLine, BarChart3 } from "lucide-react";
 import Stats from "./Stats.jsx";
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -36,8 +36,6 @@ const SUGGESTED_TAGS = {
   self: ["운동", "독서", "휴식", "공부", "취미", "친구"],
 };
 
-const DEFAULT_ROUTINES = ["운동", "독서", "일찍 자기", "물 충분히"];
-const ROUTINES_KEY = "daily-review:routines";
 
 const emptyCat = () => ({ text: "", good: "", improve: "", tags: [] });
 const emptyCats = () => ({ family: emptyCat(), work: emptyCat(), self: emptyCat() });
@@ -71,35 +69,10 @@ export default function DailyReview() {
 function RecordView() {
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState(emptyForm());
-  const [routineList, setRoutineList] = useState(DEFAULT_ROUTINES);
-  const [editRoutines, setEditRoutines] = useState(false);
-  const [newRoutine, setNewRoutine] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [history, setHistory] = useState([]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`/api/backup?key=${encodeURIComponent(ROUTINES_KEY)}`);
-        const row = await res.json();
-        if (row && row.data) {
-          const list = JSON.parse(row.data);
-          if (Array.isArray(list) && list.length) setRoutineList(list);
-        }
-      } catch (e) {}
-    })();
-  }, []);
-
-  const saveRoutineList = (list) => {
-    setRoutineList(list);
-    fetch("/api/backup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: ROUTINES_KEY, value: JSON.stringify(list) }),
-    }).catch(() => {});
-  };
 
   const loadDay = useCallback(async (d) => {
     setLoading(true);
@@ -154,18 +127,20 @@ function RecordView() {
     setCat(key, { tags: tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag] });
   };
 
-  const toggleRoutine = (name) =>
-    setForm((f) => ({ ...f, routines: { ...f.routines, [name]: !f.routines[name] } }));
 
   const save = async () => {
     setSaving(true);
     try {
-      const routines = {};
-      routineList.forEach((r) => (routines[r] = Boolean(form.routines[r])));
+      // 빈 글머리표(•)만 남은 칸은 빈 칸으로 정리
+      const clean = (t) => (t && t.replace(/[•\s]/g, "") ? t.replace(/\n?•\s*$/, "").trim() : "");
+      const categories = {};
+      Object.entries(form.cats).forEach(([k, c]) => {
+        categories[k] = { ...c, text: clean(c.text), good: clean(c.good), improve: clean(c.improve) };
+      });
       const res = await fetch("/api/daily-records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, mood: form.mood, categories: form.cats, reflection: form.reflection, routines }),
+        body: JSON.stringify({ date, mood: form.mood, categories, reflection: form.reflection, routines: form.routines }),
       });
       if (!res.ok) throw new Error("save failed");
       setSavedFlash(true);
@@ -226,48 +201,6 @@ function RecordView() {
               />
             ))}
 
-            <div style={styles.section}>
-              <div style={styles.sectionHead}>
-                <div style={styles.cardTitle}>오늘의 루틴</div>
-                <button style={styles.iconBtn} onClick={() => setEditRoutines((v) => !v)}>
-                  <Settings2 size={14} color="#8A93A0" />
-                  <span style={styles.iconBtnText}>{editRoutines ? "완료" : "편집"}</span>
-                </button>
-              </div>
-              <div style={styles.chipWrap}>
-                {routineList.map((r) =>
-                  editRoutines ? (
-                    <span key={r} style={styles.chipEditing}>
-                      {r}
-                      <button style={styles.chipRemove} onClick={() => saveRoutineList(routineList.filter((x) => x !== r))} aria-label={`${r} 삭제`}>
-                        <X size={12} color="#DC5B45" />
-                      </button>
-                    </span>
-                  ) : (
-                    <button key={r} onClick={() => toggleRoutine(r)} style={{ ...styles.routineChip, ...(form.routines[r] ? styles.routineChipOn : {}) }}>
-                      {form.routines[r] && <Check size={13} style={{ marginRight: 4 }} />}
-                      {r}
-                    </button>
-                  )
-                )}
-              </div>
-              {editRoutines && (
-                <div style={styles.addRow}>
-                  <input style={styles.addInput} placeholder="새 루틴 (예: 스트레칭)" value={newRoutine} onChange={(e) => setNewRoutine(e.target.value)} />
-                  <button
-                    style={styles.addBtn}
-                    onClick={() => {
-                      const v = newRoutine.trim();
-                      if (v && !routineList.includes(v)) saveRoutineList([...routineList, v]);
-                      setNewRoutine("");
-                    }}
-                  >
-                    <Plus size={15} color="#fff" />
-                  </button>
-                </div>
-              )}
-            </div>
-
             <button style={styles.saveBtn} onClick={save} disabled={saving}>
               {savedFlash ? (
                 <>
@@ -284,15 +217,11 @@ function RecordView() {
               <div>
                 <div style={styles.historyLabel}>최근 기록</div>
                 {history.map((row) => {
-                  const r = row.routines || {};
-                  const total = Object.keys(r).length;
-                  const done = Object.values(r).filter(Boolean).length;
                   const d = String(row.date).slice(0, 10);
                   return (
                     <button key={d} style={{ ...styles.historyRow, ...(d === date ? styles.historyRowActive : {}) }} onClick={() => setDate(d)}>
                       <span style={styles.historyMood}>{row.mood || "🙂"}</span>
                       <span style={styles.historyDate}>{fmtFull(d)}</span>
-                      {total > 0 && <span style={styles.historyRoutine}>루틴 {done}/{total}</span>}
                     </button>
                   );
                 })}
@@ -305,15 +234,54 @@ function RecordView() {
   );
 }
 
-// 내용 길이에 맞춰 높이가 자동으로 늘어나는 입력칸 (빈 칸일 땐 한 줄로 작게)
+// 내용 길이에 맞춰 높이가 자동으로 늘어나고, 줄바꿈하면 앞에 "• "가 자동으로 붙는 입력칸
+const BULLET = "• ";
 function AutoTextarea({ value, onChange, placeholder, minRows = 1, style }) {
   const ref = useRef(null);
+  const caretRef = useRef(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
+    if (caretRef.current != null) {
+      el.setSelectionRange(caretRef.current, caretRef.current);
+      caretRef.current = null;
+    }
   }, [value]);
+
+  // 한글 입력(조합) 중에도 안정적으로 동작하도록, 키 입력이 아니라 바뀐 글자를 보고 처리
+  const handleChange = (e) => {
+    let v = e.target.value;
+    let pos = e.target.selectionStart;
+    const prev = value || "";
+    // 처음 글자를 쓰기 시작하면 첫 줄에도 • 붙이기
+    if (!prev && v && !v.startsWith("•")) {
+      v = BULLET + v;
+      pos += BULLET.length;
+    }
+    // 방금 줄바꿈을 했으면 새 줄 앞에 • 붙이기
+    if (v.length > prev.length && v[pos - 1] === "\n" && v.slice(pos, pos + 1) !== "•") {
+      const lineStart = v.lastIndexOf("\n", pos - 2) + 1;
+      const prevLine = v.slice(lineStart, pos - 1);
+      if (prevLine.trim() === "•") {
+        // 빈 • 줄에서 한 번 더 엔터 → 글머리표 없이 끝내기
+        v = v.slice(0, lineStart) + v.slice(pos);
+        pos = lineStart;
+      } else {
+        v = v.slice(0, pos) + BULLET + v.slice(pos);
+        pos += BULLET.length;
+      }
+    }
+    // 전부 지워서 •만 남으면 빈 칸으로
+    if (v.trim() === "•") {
+      v = "";
+      pos = 0;
+    }
+    caretRef.current = pos;
+    onChange(v);
+  };
+
   return (
     <textarea
       ref={ref}
@@ -321,7 +289,7 @@ function AutoTextarea({ value, onChange, placeholder, minRows = 1, style }) {
       style={{ ...styles.autoInput, ...style }}
       placeholder={placeholder}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={handleChange}
     />
   );
 }
@@ -342,7 +310,7 @@ function AreaCard({ area, value, suggestions, onChange, onToggleTag }) {
         <div style={styles.cardTitle}>{area.label}</div>
         <button style={styles.tagToggle} onClick={() => setShowTags((v) => !v)}>
           <Hash size={12} style={{ marginRight: 2 }} />
-          {showTags ? "닫기" : "태그"}
+          {showTags ? "태그 닫기" : "태그"}
         </button>
       </div>
 
@@ -387,6 +355,10 @@ function AreaCard({ area, value, suggestions, onChange, onToggleTag }) {
               <Plus size={15} color="#fff" />
             </button>
           </div>
+          <button style={styles.tagDoneBtn} onClick={() => setShowTags(false)}>
+            <Check size={14} style={{ marginRight: 4 }} />
+            태그 선택 완료
+          </button>
         </div>
       )}
     </div>
@@ -427,12 +399,11 @@ export const styles = {
   iconBtn: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0 },
   iconBtnText: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
   tagToggle: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#5B6470" },
+  tagDoneBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginTop: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 13, fontWeight: 700, padding: "9px 0", borderRadius: 10 },
   tagPanel: { marginTop: 8, paddingTop: 6, borderTop: "1px dashed #E5E9EC" },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 },
   tagChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20 },
-  tagChipOn: { background: "#EEF0FF", borderColor: "#C7CCFF", color: "#4F46E5" },
-  routineChip: { display: "inline-flex", alignItems: "center", border: "1px solid #E5E9EC", background: "#fff", color: "#5B6470", fontSize: 13.5, fontWeight: 600, padding: "8px 14px", borderRadius: 20 },
-  routineChipOn: { background: "#4F46E5", borderColor: "#4F46E5", color: "#fff" },
+  tagChipOn: { background: "#EEF0FF", border: "1px solid #C7CCFF", color: "#4F46E5" },
   chipEditing: { display: "inline-flex", alignItems: "center", gap: 4, border: "1px dashed #D7DCE1", background: "#fff", color: "#5B6470", fontSize: 13.5, fontWeight: 600, padding: "7px 8px 7px 12px", borderRadius: 20 },
   chipRemove: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
   addRow: { display: "flex", gap: 6, marginTop: 8 },
@@ -444,5 +415,4 @@ export const styles = {
   historyRowActive: { boxShadow: "0 0 0 1.5px #4F46E5 inset" },
   historyMood: { fontSize: 15 },
   historyDate: { fontSize: 13, color: "#5B6470", fontWeight: 600, flex: 1, textAlign: "left" },
-  historyRoutine: { fontSize: 11.5, color: "#4F46E5", fontWeight: 700, background: "#EEF0FF", padding: "2px 8px", borderRadius: 10 },
 };
