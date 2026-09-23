@@ -452,6 +452,7 @@ export default function App() {
 
   const today = todayISO();
   const todos = buildTodos(items, today);
+  const activeCount = todos.filter((t) => !t.done).length;
   const upcomingItems = items
     .filter((it) => !it.recurring && it.date > today)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -510,7 +511,11 @@ export default function App() {
           <div style={styles.headerTopRow}>
             <div>
               <div style={styles.dateBig}>{fmtFullWithYear(today)}</div>
-              <div style={styles.subLabel}>{view === "list" ? `할 일 ${todos.length}건` : "달력"}</div>
+              {view === "list" ? (
+                <span style={styles.countBadge}>할 일 {activeCount}건</span>
+              ) : (
+                <div style={styles.subLabel}>달력</div>
+              )}
             </div>
             <button onClick={() => setModal({ mode: "backup" })} style={styles.headerBackupBtn} aria-label="백업">
               <ShieldCheck size={18} color="#5B6470" />
@@ -1952,6 +1957,7 @@ const styles = {
   headerBackupDot: { position: "absolute", top: 4, right: 5, width: 8, height: 8, borderRadius: "50%", background: "#DC5B45", border: "1.5px solid #fff" },
   dateBig: { fontSize: 21, fontWeight: 700, color: "#1F2937" },
   subLabel: { fontSize: 12.5, color: "#8A93A0", marginTop: 3, marginBottom: 16 },
+  countBadge: { display: "inline-block", marginTop: 6, marginBottom: 16, background: "#EAF6F4", color: "#0D9488", fontSize: 13, fontWeight: 700, padding: "5px 12px", borderRadius: 20 },
   tabRow: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 3, gap: 2, marginBottom: 0 },
   tabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 0", borderRadius: 8, border: "none", background: "transparent", color: "#8A93A0", fontSize: 13.5, fontWeight: 600 },
   tabBtnActive: { background: "#FFFFFF", color: "#0D9488", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
