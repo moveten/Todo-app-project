@@ -21,6 +21,7 @@ async function ensureSchema(sql) {
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS plan_done BOOLEAN`;
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS write_score INTEGER`;
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS entries JSONB`;
+  await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS memo TEXT`;
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS first_saved_at TEXT`;
   // 이미 저장된 과거 기록도 기분 점수를 채워서 통계에 포함되게 함
   await sql`
@@ -51,15 +52,16 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { date } = req.query || {};
       if (date) {
-        const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, updated_at FROM daily_records WHERE date = ${date}`;
+        const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, memo, updated_at FROM daily_records WHERE date = ${date}`;
         return res.status(200).json(rows[0] || null);
       }
-      const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, updated_at FROM daily_records ORDER BY date DESC LIMIT 100`;
+      const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, memo, updated_at FROM daily_records ORDER BY date DESC LIMIT 100`;
       return res.status(200).json(rows);
     }
 
     if (req.method === 'POST') {
-      const { date, mood, categories, reflection, routines, advice, plan, write_score, first_saved_at, entries } = req.body || {};
+      const { date, mood, categories, reflection, routines, advice, plan, write_score, first_saved_at, entries, memo } = req.body || {};
+      const memoText = typeof memo === 'string' && memo.trim() ? memo.slice(0, 10000) : null;
       // 새 구조: 항목 목록 [{ id, type, score, fields, tags }]
       const cleanEntries = Array.isArray(entries)
         ? entries.slice(0, 30).map((e) => ({
@@ -103,8 +105,8 @@ export default async function handler(req, res) {
       const routJson = JSON.stringify(cleanRoutines);
 
       const rows = await sql`
-        INSERT INTO daily_records (date, mood, mood_score, categories, reflection, routines, advice, plan, write_score, first_saved_at, entries, updated_at)
-        VALUES (${date}, ${mood || null}, ${moodScore}, ${catJson}, ${refJson}, ${routJson}, ${advice || null}, ${plan || null}, ${ws}, ${fsa}, ${entJson}, NOW())
+        INSERT INTO daily_records (date, mood, mood_score, categories, reflection, routines, advice, plan, write_score, first_saved_at, entries, memo, updated_at)
+        VALUES (${date}, ${mood || null}, ${moodScore}, ${catJson}, ${refJson}, ${routJson}, ${advice || null}, ${plan || null}, ${ws}, ${fsa}, ${entJson}, ${memoText}, NOW())
         ON CONFLICT (date) DO UPDATE
         SET mood = ${mood || null},
             mood_score = ${moodScore},
@@ -114,10 +116,11 @@ export default async function handler(req, res) {
             routines = ${routJson},
             advice = ${advice || null},
             plan = ${plan || null},
+            memo = ${memoText},
             write_score = COALESCE(daily_records.write_score, EXCLUDED.write_score),
             first_saved_at = COALESCE(daily_records.first_saved_at, EXCLUDED.first_saved_at),
             updated_at = NOW()
-        RETURNING to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, updated_at
+        RETURNING to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, memo, updated_at
       `;
       return res.status(200).json(rows[0]);
     }

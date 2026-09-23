@@ -106,7 +106,7 @@ const DEFAULT_ABOUT = `성향: 걱정이 많고 불안이 심한 편이에요. �
 let idSeq = 0;
 const newId = () => `e${Date.now().toString(36)}${(idSeq++).toString(36)}`;
 const newEntry = (type) => ({ id: newId(), type, score: null, fields: {}, tags: [] });
-const emptyForm = () => ({ mood: "🙂", entries: DEFAULT_TYPES.map(newEntry), reflection: {}, routines: {}, advice: "", plan: "" });
+const emptyForm = () => ({ mood: "🙂", entries: DEFAULT_TYPES.map(newEntry), reflection: {}, routines: {}, advice: "", plan: "", memo: "" });
 
 // 예전 구조(가족/업무/나 고정 칸)를 새 구조(항목 목록)로 변환
 function legacyToEntries(c) {
@@ -194,6 +194,8 @@ function RecordView() {
   const [showPage, setShowPage] = useState(false);
   const [toast, setToast] = useState("");
   const loadedRef = useRef(""); // 서버에서 불러온(=저장된) 상태
+  const formRef = useRef(form);
+  formRef.current = form;
   const [scoreInfo, setScoreInfo] = useState(null); // { exists, score, at }
 
   const loadDay = useCallback(async (d) => {
@@ -217,6 +219,7 @@ function RecordView() {
           routines: row.routines || {},
           advice: row.advice || "",
           plan: row.plan || "",
+          memo: row.memo || "",
         };
       }
       loadedRef.current = JSON.stringify(serverForm);
@@ -374,8 +377,8 @@ function RecordView() {
     }
   };
 
-  const checkScores = () => {
-    const missEntries = form.entries.filter((e) => TYPES[e.type] && TYPES[e.type].score && !e.score);
+  const checkScores = (f = form) => {
+    const missEntries = f.entries.filter((e) => TYPES[e.type] && TYPES[e.type].score && !e.score);
     setMissing(missEntries.map((e) => e.id));
     if (missEntries.length) {
       const names = [...new Set(missEntries.map((e) => TYPES[e.type].label))].join(", ");
@@ -385,8 +388,9 @@ function RecordView() {
     return true;
   };
 
-  const save = async () => {
-    if (!checkScores()) return false;
+  const save = async (over) => {
+    const form = over && over.entries ? over : formRef.current; // 방금 채운 내용으로 바로 저장할 수 있게
+    if (!checkScores(form)) return false;
     setSaving(true);
     try {
       const clean = (t) => (t && t.replace(/[•\s]/g, "") ? t.replace(/\n?•\s*$/, "").trim() : "");
@@ -405,6 +409,7 @@ function RecordView() {
           routines: Object.fromEntries(checklist.map((c) => [c, Boolean(form.routines[c])])),
           advice: (form.advice || "").trim(),
           plan: (form.plan || "").trim(),
+          memo: (form.memo || "").trim(),
           write_score: scoreFor(date),
           first_saved_at: hhmm(new Date()),
         }),
@@ -452,6 +457,68 @@ function RecordView() {
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(""), 3500);
+  };
+
+  // 📌 핀보드: 아무렇게나 적은 메모를 Claude가 정리 → 붙여넣으면 카드에 자동으로 채우고 저장
+  const organizeWithClaude = () => {
+    if (!(form.memo || "").trim()) {
+      window.alert("핀보드에 먼저 아무거나 적어주세요.");
+      return;
+    }
+    const text = buildOrganizePrompt(date, form, about, checklist, tagPresets);
+    copyText(text).then((ok) => showToast(ok ? "복사됐어요! Claude에 붙여넣기 하세요" : "복사에 실패했어요. 다시 눌러주세요"));
+    window.open("https://claude.ai/new", "_blank");
+  };
+
+  const applyOrganized = async (raw) => {
+    const parsed = parseOrganized(raw);
+    if (!parsed) {
+      window.alert("정리된 데이터를 찾지 못했어요. Claude의 마지막 답변(맨 아래 { } 데이터 포함)을 통째로 복사해서 붙여넣어 주세요.");
+      return false;
+    }
+    const { data, adviceText } = parsed;
+    const validMood = MOODS.map((m) => m.emoji);
+    const moodFromNum = { 5: "😊", 4: "🙂", 3: "😐", 2: "😞", 1: "😣" };
+    const mood = validMood.includes(data.mood) ? data.mood : moodFromNum[Number(data.mood)] || form.mood;
+    const entries = (Array.isArray(data.entries) ? data.entries : [])
+      .filter((e) => e && TYPES[e.type])
+      .map((e) => {
+        const t = TYPES[e.type];
+        const fields = {};
+        t.fields.forEach((f) => {
+          let v = e.fields && e.fields[f.k];
+          if (Array.isArray(v)) v = v.map((x) => `• ${String(x).replace(/^•\s*/, "")}`).join("\n");
+          if (typeof v === "string" && v.trim()) {
+            v = v.trim();
+            if (!f.single) v = v.split("\n").map((l) => (l.trim().startsWith("•") ? l.trim() : `• ${l.trim()}`)).filter((l) => l !== "•").join("\n");
+            fields[f.k] = v;
+          }
+        });
+        const score = [1, 2, 3, 4, 5].includes(Number(e.score)) ? Number(e.score) : null;
+        const tags = Array.isArray(e.tags) ? [...new Set(e.tags.map((x) => String(x).replace(/^#/, "").trim()).filter(Boolean))] : [];
+        return { id: newId(), type: e.type, score: t.score ? score : null, fields, tags };
+      });
+    if (!entries.length) {
+      window.alert("정리된 카드가 비어 있어요. Claude에게 다시 정리해달라고 해주세요.");
+      return false;
+    }
+    const done = Array.isArray(data.checklist) ? data.checklist : [];
+    const routines = { ...form.routines };
+    checklist.forEach((c) => {
+      if (done.includes(c)) routines[c] = true;
+    });
+    const next = {
+      ...form,
+      mood,
+      entries,
+      routines,
+      advice: adviceText || form.advice,
+      plan: (data.plan && String(data.plan).trim()) || extractPlan(adviceText) || form.plan,
+    };
+    setForm(next);
+    const ok = await save(next);
+    showToast(ok ? "📌 정리한 내용을 채우고 저장했어요" : "채웠어요. 빠진 점수를 고른 뒤 저장해주세요");
+    return true;
   };
 
   const askClaude = () => {
@@ -522,6 +589,13 @@ function RecordView() {
         ) : (
           <>
             <TimeAttack date={date} info={scoreInfo} />
+
+            <PinBoard
+              memo={form.memo}
+              onMemo={(v) => setForm((f) => ({ ...f, memo: v }))}
+              onOrganize={organizeWithClaude}
+              onApply={applyOrganized}
+            />
 
             {prevPlan && (
               <div style={styles.planCheck}>
@@ -864,6 +938,52 @@ function Checklist({ items, checked, onToggle, onSaveList }) {
   );
 }
 
+// 📌 핀보드: 형식 없이 생각나는 대로 적는 곳
+function PinBoard({ memo, onMemo, onOrganize, onApply }) {
+  const [open, setOpen] = useState(!!memo);
+  const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <div style={{ ...styles.section, ...styles.pinBox }}>
+      <button style={styles.pinHead} onClick={() => setOpen((o) => !o)}>
+        <span style={styles.cardTitle}>📌 핀보드</span>
+        <span style={styles.pinSub}>아무렇게나 적으면 Claude가 정리해줘요</span>
+        <ChevronDown size={16} style={{ marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+      </button>
+      {open && (
+        <>
+          <AutoTextarea
+            value={memo}
+            onChange={onMemo}
+            minRows={4}
+            bullet={false}
+            placeholder={"예) 아침에 애들 늦잠 자서 정신없었음. 오전 회의 보고 잘함, 근데 예산표 또 미룸. 저녁에 민수랑 동네 국밥집. 스쿼트 함. 좀 불안했음..."}
+          />
+          <button style={styles.claudeBtn} onClick={onOrganize}>
+            <Sparkles size={15} style={{ marginRight: 6 }} />① Claude로 정리 요청
+          </button>
+          <div style={styles.adviceHint}>
+            Claude가 부족한 걸 물어보면 채팅에서 답해주세요. 마지막에 조언과 정리된 데이터를 주면, 그 답변을 통째로 복사해서 아래에 붙여넣으세요.
+          </div>
+          <AutoTextarea value={result} onChange={setResult} minRows={2} bullet={false} placeholder="② Claude의 마지막 답변 붙여넣기" />
+          <button
+            style={styles.adviceSaveBtn}
+            disabled={busy || !result.trim()}
+            onClick={async () => {
+              setBusy(true);
+              const ok = await onApply(result);
+              setBusy(false);
+              if (ok) setResult("");
+            }}
+          >
+            {busy ? "채우는 중..." : "③ 앱에 채우고 저장"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // 항목 카드: 종류별 프리셋 칸 + 점수 + 태그(카드 안에서 바로 선택·추가·삭제)
 function EntryCard({ entry, missing, presets, onChange, onToggleTag, onSavePresets, onRemove }) {
   const t = TYPES[entry.type] || { label: entry.type, emoji: "📝", score: false, fields: [{ k: "did", label: "내용" }] };
@@ -1023,6 +1143,12 @@ function buildPrompt(date, form, history, about, checklist = []) {
       lines.push(`- ${fmtFull(r.date)} 기분 ${r.mood || "-"}${imp.length ? ` | 보완할 점: ${imp.join(", ")}` : ""}${planInfo}`);
     });
   }
+  adviceInstructions(lines, about);
+  return lines.join("\n");
+}
+
+// 조언 형식 (조언받기·핀보드 정리에서 함께 사용)
+function adviceInstructions(lines, about, intro) {
   if (about && about.trim()) {
     lines.push("");
     lines.push("(나에 대해: 조언할 때 꼭 반영해주세요)");
@@ -1030,7 +1156,7 @@ function buildPrompt(date, form, history, about, checklist = []) {
     lines.push("→ 내 성향을 이해하고, 위 원칙 중 오늘 기록과 맞닿는 것을 1~2개 골라 자연스럽게 연결해주세요. 매번 전부 나열하지는 말아주세요. 불안하거나 주눅든 부분이 보이면 다그치지 말고, 작게 시작할 수 있는 방향으로 말해주세요.");
   }
   lines.push("");
-  lines.push("위 기록을 바탕으로 아래 형식 그대로 답해주세요. 마크다운 기호(**, #, 목록, 표)는 쓰지 말아주세요.");
+  lines.push(intro || "위 기록을 바탕으로 아래 형식 그대로 답해주세요. 마크다운 기호(**, #, 목록, 표)는 쓰지 말아주세요.");
   lines.push("");
   lines.push("💼 업무");
   lines.push("(한 문단, 6~8문장) 업무의 달인 관점에서 업무 기록을 상세히 분석해주세요. 잘한 점은 구체적으로 칭찬하고, 일하는 방식·우선순위·보완할 점의 원인과 개선법을 실전적으로 말해주세요.");
@@ -1044,7 +1170,76 @@ function buildPrompt(date, form, history, about, checklist = []) {
   lines.push("명언은 오늘 기록과 어울리는 것으로, 실제로 그 사람이 한 말이고 출처가 확인되는 것만 골라주세요. 흔히 잘못 알려진 명언이나 출처가 불분명한 말은 쓰지 말고, 확실하지 않으면 출처가 분명한 다른 명언을 골라주세요.");
   lines.push("");
   lines.push("진단은 하지 말고, 기록에 많이 힘든 내용이 있으면 해결책보다 공감을 먼저 하고 믿을 만한 사람이나 전문가와 이야기해보길 권해주세요.");
+}
+
+// 📌 핀보드 정리 요청문
+function buildOrganizePrompt(date, form, about, checklist, tagPresets) {
+  const lines = [];
+  lines.push(`[파워로그] ${fmtFull(date)} 하루를 아무렇게나 적은 메모예요. 아래 형식에 맞게 정리하고 조언해주세요.`);
+  lines.push("");
+  lines.push("(메모)");
+  lines.push(form.memo.trim());
+  const filled = form.entries.filter((e) => TYPES[e.type] && (e.score || e.tags.length || Object.values(e.fields).some((v) => v && v.replace(/[•\s]/g, ""))));
+  if (filled.length) {
+    lines.push("");
+    lines.push("(이미 앱에 적어둔 내용: 메모와 합쳐서 정리해주세요)");
+    filled.forEach((e) => {
+      const t = TYPES[e.type];
+      lines.push(`■ ${t.label}${e.score ? ` (점수 ${e.score})` : ""}: ${t.fields.filter((f) => e.fields[f.k]).map((f) => `${f.label}=${clip(e.fields[f.k], 80)}`).join(" / ")}${e.tags.length ? ` 태그=${e.tags.join(",")}` : ""}`);
+    });
+  }
+  lines.push("");
+  lines.push("(정리 규칙)");
+  lines.push("카드 종류와 칸:");
+  TYPE_ORDER.forEach((k) => {
+    const t = TYPES[k];
+    lines.push(`- ${k} (${t.label}): ${t.score ? "score 1~5, " : ""}${t.fields.map((f) => `${f.k}=${f.label}`).join(", ")} / 추천 태그: ${(tagPresets[k] || []).join(", ")}`);
+  });
+  lines.push(`- 체크리스트 항목 (오늘 한 것만 고르기): ${checklist.join(", ")}`);
+  lines.push("- 기분(mood)은 😊(최고) 🙂(좋음) 😐(보통) 😞(별로) 😣(힘듦) 중 하나");
+  lines.push("- 메모에 없는 사실은 지어내지 말아주세요. 친구를 여러 번 만났으면 friend 카드를 여러 개 만들어주세요. 내용이 없는 카드는 빼주세요.");
+  lines.push("- 여러 줄 칸은 한 줄에 하나씩 \"• \"로 시작해주세요.");
+  lines.push("");
+  lines.push("(진행 방법)");
+  lines.push("1단계: 정리에 꼭 필요한 정보가 빠졌으면 (예: 점수를 짐작할 수 없음, 친구를 누구와 어디서 만났는지 없음, 기분을 알 수 없음) 먼저 짧은 질문만 번호로 최대 3개 해주세요. 점수는 짐작하지 말고 물어봐주세요. 빠진 게 없으면 바로 2단계로 가주세요.");
+  lines.push("2단계: 내 답을 받으면 아래 조언을 쓰고, 맨 마지막에 정리된 데이터를 ```json 코드블록 하나로 주세요.");
+  adviceInstructions(lines, about, "조언은 아래 형식 그대로 써주세요. 마크다운 기호(**, #, 목록, 표)는 쓰지 말아주세요.");
+  lines.push("");
+  lines.push("맨 마지막 데이터 형식 (이 형식 그대로, 코드블록 안에는 JSON만):");
+  lines.push("```json");
+  lines.push('{"mood":"🙂","entries":[{"type":"family","score":4,"fields":{"did":"• ...","feel":"• ..."},"tags":["아이"]},{"type":"friend","fields":{"who":"...","where":"...","what":"• ..."},"tags":[]}],"checklist":["스쿼트"],"plan":"내일 딱 한 가지 문장"}');
+  lines.push("```");
   return lines.join("\n");
+}
+
+// 붙여넣은 답변에서 JSON 데이터와 조언 글을 분리
+function parseOrganized(raw) {
+  const text = String(raw || "");
+  let jsonStr = null;
+  let rest = text;
+  const fence = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].pop();
+  if (fence) {
+    jsonStr = fence[1];
+    rest = text.replace(fence[0], "");
+  } else {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      jsonStr = text.slice(start, end + 1);
+      rest = text.slice(0, start) + text.slice(end + 1);
+    }
+  }
+  if (!jsonStr) return null;
+  try {
+    const data = JSON.parse(jsonStr.trim().replace(/,\s*([}\]])/g, "$1"));
+    const adviceText = rest
+      .replace(/맨 마지막 데이터.*$/m, "")
+      .replace(/^\s*(정리된 데이터|데이터)\s*[:：]?\s*$/gm, "")
+      .trim();
+    return { data, adviceText };
+  } catch (e) {
+    return null;
+  }
 }
 
 async function copyText(text) {
@@ -1346,6 +1541,9 @@ export const styles = {
   tagAdd: { display: "inline-flex", alignItems: "center", border: "1px dashed #D7DCE1", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 700, padding: "6px 10px", borderRadius: 20 },
   tagDoneBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginTop: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 13.5, fontWeight: 700, padding: "10px 0", borderRadius: 10 },
   saveBtn: { width: "100%", border: "none", background: "#4F46E5", color: "#fff", fontWeight: 700, fontSize: 14.5, padding: "13px 0", borderRadius: 12, marginTop: 6, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center" },
+  pinBox: { boxShadow: "0 0 0 1.5px #C7CCFF inset, 0 1px 3px rgba(15,23,42,0.06)" },
+  pinHead: { width: "100%", display: "flex", alignItems: "center", gap: 6, border: "none", background: "none", padding: "2px 0 8px", textAlign: "left" },
+  pinSub: { fontSize: 11.5, color: "#9AA3AF", fontWeight: 600 },
   claudeBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "#1F2937", color: "#fff", fontSize: 14, fontWeight: 700, padding: "11px 0", borderRadius: 10, marginTop: 8 },
   adviceHint: { fontSize: 12, color: "#8A93A0", margin: "8px 0", lineHeight: 1.5 },
   aboutToggle: { width: "100%", display: "flex", alignItems: "center", border: "1px solid #EEF1F3", background: "#FAFBFC", borderRadius: 10, padding: "9px 10px", fontSize: 13, fontWeight: 800, color: "#1F2937", marginBottom: 8 },
