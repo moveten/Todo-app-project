@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/powerlog", "destination": "/index.html" }
+    { "source": "/powerlog", "destination": "/powerlog.html" }
   ]
 }
