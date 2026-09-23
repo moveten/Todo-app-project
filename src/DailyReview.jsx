@@ -425,7 +425,7 @@ function AreaCard({ area, value, onChange }) {
             <button
               key={n}
               onClick={() => onChange({ score: value.score === n ? null : n })}
-              style={{ ...styles.scoreBtn, ...(value.score && n <= value.score ? styles.scoreBtnOn : {}) }}
+              style={{ ...styles.scoreBtn, ...(value.score === n ? styles.scoreBtnOn : {}) }}
               aria-label={`${n}점`}
             >
               {n}
