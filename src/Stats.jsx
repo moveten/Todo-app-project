@@ -3,6 +3,12 @@ import { Loader2 } from "lucide-react";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// 앱 기준 오늘 (새벽 4시 전은 전날)
+const logicalToday = () => {
+  const d = new Date();
+  if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+  return toISO(d);
+};
 const fmtShort = (iso) => {
   const d = new Date(String(iso).slice(0, 10) + "T00:00:00");
   return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -39,11 +45,12 @@ export default function Stats() {
       setLoading(true);
       setError(false);
       try {
-        let url = "/api/stats";
+        const today = logicalToday();
+        let url = `/api/stats?to=${today}`;
         if (period > 0) {
-          const d = new Date();
+          const d = new Date(today + "T00:00:00");
           d.setDate(d.getDate() - (period - 1));
-          url += `?from=${toISO(d)}`;
+          url += `&from=${toISO(d)}`;
         }
         const res = await fetch(url);
         if (!res.ok) throw new Error("fail");
@@ -81,6 +88,7 @@ export default function Stats() {
       ) : (
         <>
           <Summary summary={data.summary} routines={data.routines || []} />
+          <TimeAttackStats ta={data.timeAttack} />
           <AreaScores items={data.areaScores || []} />
           <Plans plans={data.plans} />
           <Checks routines={data.routines || []} />
@@ -191,6 +199,44 @@ function Weekday({ weekday }) {
             </div>
           );
         })}
+      </div>
+    </Card>
+  );
+}
+
+function TimeAttackStats({ ta }) {
+  if (!ta || !ta.days.length) return null;
+  const color = (n) => (n == null ? "#E5E9EC" : n >= 100 ? INDIGO : n >= 70 ? "#A5ACF7" : n > 0 ? "#F2C46B" : "#F2B8AE");
+  return (
+    <Card title="⏱ 기록 타임어택" sub="안 쓴 날은 0점이에요">
+      <div style={s.taRow}>
+        <div style={s.taStat}>
+          <div style={s.taNum}>{ta.avg ?? "–"}</div>
+          <div style={s.taLabel}>평균 점수</div>
+        </div>
+        <div style={s.taStat}>
+          <div style={s.taNum}>🔥 {ta.streak}</div>
+          <div style={s.taLabel}>연속 기록</div>
+        </div>
+        <div style={s.taStat}>
+          <div style={s.taNum}>{ta.onTime}</div>
+          <div style={s.taLabel}>자정 전 기록</div>
+        </div>
+        <div style={s.taStat}>
+          <div style={{ ...s.taNum, color: "#DC5B45" }}>{ta.zero}</div>
+          <div style={s.taLabel}>0점</div>
+        </div>
+      </div>
+      <div style={s.taBars}>
+        {ta.days.map((d) => (
+          <div key={d.date} style={s.taBarCol} title={`${d.date} ${d.score ?? "-"}`}>
+            <div style={{ ...s.taBar, height: d.score == null ? 4 : Math.max(4, (d.score / 100) * 60), background: color(d.score), ...(d.pending ? { border: "1px dashed #A5ACF7", background: "transparent" } : {}) }} />
+          </div>
+        ))}
+      </div>
+      <div style={s.taAxis}>
+        <span>{fmtShort(ta.days[0].date)}</span>
+        <span>{fmtShort(ta.days[ta.days.length - 1].date)}</span>
       </div>
     </Card>
   );
@@ -426,6 +472,14 @@ const s = {
   progNum: { fontSize: 12, color: "#8A93A0" },
   progTrack: { height: 8, background: "#F0F2F4", borderRadius: 6, overflow: "hidden" },
   progFill: { height: "100%", background: INDIGO, borderRadius: 6 },
+  taRow: { display: "flex", gap: 6, marginTop: 8 },
+  taStat: { flex: 1, textAlign: "center", background: "#F7F8FA", borderRadius: 10, padding: "8px 2px" },
+  taNum: { fontSize: 17, fontWeight: 800, color: INDIGO },
+  taLabel: { fontSize: 10.5, color: "#8A93A0", fontWeight: 700, marginTop: 2 },
+  taBars: { display: "flex", alignItems: "flex-end", gap: 2, height: 64, marginTop: 12 },
+  taBarCol: { flex: 1, display: "flex", alignItems: "flex-end", height: "100%" },
+  taBar: { width: "100%", borderRadius: 3, boxSizing: "border-box" },
+  taAxis: { display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "#9AA3AF", marginTop: 4 },
   areaMoodNote: { fontSize: 11.5, color: "#8A93A0", marginTop: 4 },
   planRateRow: { display: "flex", alignItems: "baseline", gap: 8, margin: "6px 0" },
   planRate: { fontSize: 24, fontWeight: 800, color: INDIGO },

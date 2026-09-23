@@ -21,9 +21,9 @@ export default async function handler(req, res) {
   try {
     const from = (req.query && req.query.from) || null; // YYYY-MM-DD, 없으면 전체
     const rows = from
-      ? await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done
+      ? await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done, write_score
                   FROM daily_records WHERE date >= ${from} ORDER BY date`
-      : await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done
+      : await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done, write_score
                   FROM daily_records ORDER BY date`;
 
     const scored = rows.filter((r) => r.mood_score != null);
@@ -117,6 +117,41 @@ export default async function handler(req, res) {
       recent: [...checked].reverse().slice(0, 5).map((r) => ({ date: r.date, plan: r.plan, done: r.plan_done })),
     };
 
+    // 9) 기록 타임어택: 기간의 모든 날짜 (안 쓴 날 = 0점)
+    const to = (req.query && req.query.to) || null; // 앱 기준 "오늘"
+    const addDay = (iso, n) => {
+      const d = new Date(iso + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    let timeAttack = null;
+    const startDate = from || (rows[0] && rows[0].date);
+    if (startDate && to && startDate <= to) {
+      const days = [];
+      for (let d = startDate; d <= to && days.length < 400; d = addDay(d, 1)) {
+        const r = byDate[d];
+        // 오늘인데 아직 안 썼으면 "진행 중"(null), 예전 기록 중 점수 없는 건 제외(null)
+        let score;
+        if (r) score = r.write_score != null ? r.write_score : null;
+        else score = d === to ? null : 0;
+        days.push({ date: d, score, pending: !r && d === to });
+      }
+      const known = days.filter((x) => x.score != null).map((x) => x.score);
+      let streak = 0;
+      for (let i = days.length - 1; i >= 0; i--) {
+        if (days[i].pending) continue;
+        if (days[i].score != null && days[i].score > 0) streak++;
+        else break;
+      }
+      timeAttack = {
+        avg: known.length ? Math.round(avg(known)) : null,
+        streak,
+        onTime: days.filter((x) => x.score != null && x.score >= 70).length,
+        zero: days.filter((x) => x.score === 0).length,
+        days: days.slice(-30),
+      };
+    }
+
     // 6) 잘한 점 / 보완할 점 모아보기 (최신순)
     const reflections = [];
     [...rows].reverse().forEach((r) => {
@@ -138,6 +173,7 @@ export default async function handler(req, res) {
       areaScores,
       plans,
       routineMood,
+      timeAttack,
     });
   } catch (err) {
     console.error('stats API error:', err);

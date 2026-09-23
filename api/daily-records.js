@@ -19,6 +19,8 @@ async function ensureSchema(sql) {
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS advice TEXT`;
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS plan TEXT`;
   await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS plan_done BOOLEAN`;
+  await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS write_score INTEGER`;
+  await sql`ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS first_saved_at TEXT`;
   // 이미 저장된 과거 기록도 기분 점수를 채워서 통계에 포함되게 함
   await sql`
     UPDATE daily_records SET mood_score = CASE mood
@@ -48,15 +50,17 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { date } = req.query || {};
       if (date) {
-        const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, plan, plan_done, updated_at FROM daily_records WHERE date = ${date}`;
+        const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, updated_at FROM daily_records WHERE date = ${date}`;
         return res.status(200).json(rows[0] || null);
       }
-      const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, plan, plan_done, updated_at FROM daily_records ORDER BY date DESC LIMIT 100`;
+      const rows = await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, updated_at FROM daily_records ORDER BY date DESC LIMIT 100`;
       return res.status(200).json(rows);
     }
 
     if (req.method === 'POST') {
-      const { date, mood, categories, reflection, routines, advice, plan } = req.body || {};
+      const { date, mood, categories, reflection, routines, advice, plan, write_score, first_saved_at } = req.body || {};
+      const ws = Number.isInteger(write_score) && write_score >= 0 && write_score <= 100 ? write_score : null;
+      const fsa = typeof first_saved_at === 'string' ? first_saved_at.slice(0, 5) : null;
       if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
 
       const moodScore = MOOD_SCORES[mood] ?? null;
@@ -83,8 +87,8 @@ export default async function handler(req, res) {
       const routJson = JSON.stringify(cleanRoutines);
 
       const rows = await sql`
-        INSERT INTO daily_records (date, mood, mood_score, categories, reflection, routines, advice, plan, updated_at)
-        VALUES (${date}, ${mood || null}, ${moodScore}, ${catJson}, ${refJson}, ${routJson}, ${advice || null}, ${plan || null}, NOW())
+        INSERT INTO daily_records (date, mood, mood_score, categories, reflection, routines, advice, plan, write_score, first_saved_at, updated_at)
+        VALUES (${date}, ${mood || null}, ${moodScore}, ${catJson}, ${refJson}, ${routJson}, ${advice || null}, ${plan || null}, ${ws}, ${fsa}, NOW())
         ON CONFLICT (date) DO UPDATE
         SET mood = ${mood || null},
             mood_score = ${moodScore},
@@ -93,8 +97,10 @@ export default async function handler(req, res) {
             routines = ${routJson},
             advice = ${advice || null},
             plan = ${plan || null},
+            write_score = COALESCE(daily_records.write_score, EXCLUDED.write_score),
+            first_saved_at = COALESCE(daily_records.first_saved_at, EXCLUDED.first_saved_at),
             updated_at = NOW()
-        RETURNING to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, plan, plan_done, updated_at
+        RETURNING to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, reflection, routines, advice, plan, plan_done, write_score, first_saved_at, updated_at
       `;
       return res.status(200).json(rows[0]);
     }

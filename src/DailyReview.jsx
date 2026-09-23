@@ -17,6 +17,20 @@ const addDays = (iso, days) => {
   d.setDate(d.getDate() + days);
   return toISO(d);
 };
+// ⏱ 기록 타임어택: 그날 처음 저장한 시각으로 점수 (한 번 받은 점수는 유지)
+export function scoreFor(date, now = new Date()) {
+  const logical = todayISO();
+  if (date > logical) return null; // 미래
+  if (date < logical) return 0; // 기한 지남
+  const h = now.getHours();
+  if (h < DAY_START_HOUR) return 30; // 자정 넘김
+  if (h < 21) return 100;
+  if (h === 21) return 90;
+  if (h === 22) return 80;
+  return 70; // 23시대
+}
+const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
 export const fmtFull = (iso) => {
   const d = new Date(String(iso).slice(0, 10) + "T00:00:00");
   const days = ["일", "월", "화", "수", "목", "금", "토"];
@@ -130,6 +144,7 @@ function RecordView() {
   const [showPage, setShowPage] = useState(false);
   const [toast, setToast] = useState("");
   const loadedRef = useRef(""); // 서버에서 불러온(=저장된) 상태
+  const [scoreInfo, setScoreInfo] = useState(null); // { exists, score, at }
 
   const loadDay = useCallback(async (d) => {
     setLoading(true);
@@ -141,6 +156,7 @@ function RecordView() {
       const row = await res.json();
       const prev = await prevRes.json();
       let serverForm = emptyForm();
+      setScoreInfo(row ? { exists: true, score: row.write_score, at: row.first_saved_at } : { exists: false, score: null, at: null });
       setPrevPlan(prev && prev.plan ? { date: prev.date, plan: prev.plan, done: prev.plan_done } : null);
       if (row && row.categories) {
         const c = row.categories;
@@ -300,9 +316,22 @@ function RecordView() {
           routines: Object.fromEntries(checklist.map((c) => [c, Boolean(form.routines[c])])),
           advice: (form.advice || "").trim(),
           plan: (form.plan || "").trim(),
+          write_score: scoreFor(date),
+          first_saved_at: hhmm(new Date()),
         }),
       });
       if (!res.ok) throw new Error("save failed");
+      try {
+        const saved = await res.json();
+        if (saved) {
+          const first = !scoreInfo || scoreInfo.score == null;
+          setScoreInfo({ exists: true, score: saved.write_score, at: saved.first_saved_at });
+          if (first && saved.write_score != null) {
+            setToast(`⏱ 오늘 기록 점수 ${saved.write_score}점!`);
+            setTimeout(() => setToast(""), 3000);
+          }
+        }
+      } catch (e) {}
       loadedRef.current = JSON.stringify(form);
       clearDraft(date);
       setSavedFlash(true);
@@ -393,6 +422,8 @@ function RecordView() {
           </div>
         ) : (
           <>
+            <TimeAttack date={date} info={scoreInfo} />
+
             {prevPlan && (
               <div style={styles.planCheck}>
                 <div style={styles.planCheckLabel}>🎯 어제의 다짐, 해냈나요?</div>
@@ -474,6 +505,7 @@ function RecordView() {
                       <span style={styles.historyMood}>{row.mood || "🙂"}</span>
                       <span style={styles.historyDate}>{fmtFull(d)}</span>
                       {row.plan_done === true && <span style={styles.historyBadge}>다짐 ✅</span>}
+                      {row.write_score != null && <span style={{ ...styles.historyScore, ...scoreColor(row.write_score) }}>{row.write_score}점</span>}
                     </button>
                   );
                 })}
@@ -485,6 +517,87 @@ function RecordView() {
       {showPage && <OnePage date={date} form={form} checklist={checklist} onClose={() => setShowPage(false)} />}
       {toast && <div style={styles.toast}>{toast}</div>}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+const scoreColor = (n) =>
+  n >= 100 ? { background: "#4F46E5", color: "#fff" } : n >= 70 ? { background: "#EEF0FF", color: "#4F46E5" } : n > 0 ? { background: "#FDF3DC", color: "#B06A00" } : { background: "#FBEAE7", color: "#DC5B45" };
+
+const fmtLeft = (ms) => {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const sec = t % 60;
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+};
+
+function TimeAttack({ date, info }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!info) return null;
+
+  // 이미 점수를 받은 날
+  if (info.score != null) {
+    return (
+      <div style={{ ...styles.taBox, ...styles.taDone }}>
+        <span style={styles.taTrophy}>{info.score >= 100 ? "🏆" : info.score >= 70 ? "🥈" : info.score > 0 ? "😅" : "💤"}</span>
+        <div style={{ flex: 1 }}>
+          <div style={styles.taTitle}>기록 점수 {info.score}점</div>
+          {info.at && <div style={styles.taSub}>{info.at}에 처음 저장</div>}
+        </div>
+      </div>
+    );
+  }
+
+  const logical = todayISO();
+  if (date > logical) return null;
+  if (date < logical) {
+    if (info.exists) return null; // 점수 기능 전의 예전 기록
+    return (
+      <div style={{ ...styles.taBox, ...styles.taZero }}>
+        <span style={styles.taTrophy}>💤</span>
+        <div style={{ flex: 1 }}>
+          <div style={styles.taTitle}>이 날은 0점이에요</div>
+          <div style={styles.taSub}>기한이 지나서 지금 써도 0점이에요. 그래도 기록은 남겨두면 좋아요.</div>
+        </div>
+      </div>
+    );
+  }
+
+  // 오늘: 카운트다운
+  const score = scoreFor(date, now);
+  const h = now.getHours();
+  const next = new Date(now);
+  let label;
+  if (h < DAY_START_HOUR) {
+    next.setHours(DAY_START_HOUR, 0, 0, 0);
+    label = "0점 되기까지";
+  } else {
+    const boundary = h < 21 ? 21 : h + 1; // 다음 감점 시각
+    next.setHours(boundary, 0, 0, 0);
+    label = boundary >= 24 ? "자정 마감까지" : `${boundary}시 감점까지`;
+  }
+  const left = next - now;
+  const urgent = h >= 23 || h < DAY_START_HOUR;
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  return (
+    <div style={{ ...styles.taBox, ...(urgent ? styles.taUrgent : styles.taLive) }}>
+      <span style={styles.taTrophy}>⏱</span>
+      <div style={{ flex: 1 }}>
+        <div style={styles.taTitle}>
+          지금 저장하면 <b>{score}점</b>
+        </div>
+        <div style={styles.taSub}>
+          {label} {fmtLeft(left)}
+          {h >= DAY_START_HOUR && h < 21 && ` · 자정 마감 ${fmtLeft(midnight - now)}`}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1028,6 +1141,15 @@ export const styles = {
   moodLabel: { fontSize: 11, color: "#9AA3AF", fontWeight: 600 },
   body: { flex: 1, padding: "14px 16px 60px" },
   loadingWrap: { display: "flex", justifyContent: "center", padding: "60px 0" },
+  taBox: { display: "flex", alignItems: "center", gap: 10, borderRadius: 14, padding: "11px 14px", marginBottom: 10 },
+  taLive: { background: "#EEF0FF", color: "#1F2937" },
+  taUrgent: { background: "#DC5B45", color: "#fff" },
+  taDone: { background: "#FFFFFF", color: "#1F2937", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
+  taZero: { background: "#F3F4F6", color: "#5B6470" },
+  taTrophy: { fontSize: 22 },
+  taTitle: { fontSize: 14.5, fontWeight: 700 },
+  taSub: { fontSize: 12, opacity: 0.8, marginTop: 2, fontVariantNumeric: "tabular-nums" },
+  historyScore: { fontSize: 11.5, fontWeight: 800, padding: "2px 8px", borderRadius: 10 },
   planCheck: { background: "#1F2937", color: "#fff", borderRadius: 14, padding: "12px 14px", marginBottom: 10 },
   planCheckLabel: { fontSize: 12, fontWeight: 700, color: "#C7CCFF" },
   planCheckText: { fontSize: 14.5, fontWeight: 700, marginTop: 4, lineHeight: 1.45 },
