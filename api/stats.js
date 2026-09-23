@@ -49,6 +49,18 @@ export default async function handler(req, res) {
       .map((x) => ({ ...x, rate: x.total ? Math.round((x.done / x.total) * 100) : 0 }))
       .sort((a, b) => b.rate - a.rate);
 
+    // 3-1) 체크리스트 항목을 한 날 vs 안 한 날의 기분 (어떤 행동이 기분에 도움이 되나)
+    const routineMood = Object.keys(routineMap)
+      .map((name) => {
+        const rel = scored.filter((r) => r.routines && name in r.routines);
+        const yes = rel.filter((r) => r.routines[name]).map((r) => r.mood_score);
+        const no = rel.filter((r) => !r.routines[name]).map((r) => r.mood_score);
+        return { name, yesDays: yes.length, noDays: no.length, yesAvg: round1(avg(yes)), noAvg: round1(avg(no)) };
+      })
+      .filter((x) => x.yesDays >= 2 && x.noDays >= 2)
+      .map((x) => ({ ...x, diff: round1(x.yesAvg - x.noAvg) }))
+      .sort((a, b) => b.diff - a.diff);
+
     // 4) 영역별 태그 순위 + 5) 태그와 기분의 관계
     const tagsByArea = {};
     const tagDays = {}; // tag -> Set(date)
@@ -125,6 +137,7 @@ export default async function handler(req, res) {
       reflections,
       areaScores,
       plans,
+      routineMood,
     });
   } catch (err) {
     console.error('stats API error:', err);

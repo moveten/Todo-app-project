@@ -84,6 +84,7 @@ export default function Stats() {
           <AreaScores items={data.areaScores || []} />
           <Plans plans={data.plans} />
           <Checks routines={data.routines || []} />
+          <CheckMood items={data.routineMood || []} />
           <MoodTrend points={data.moodTrend} />
           <Weekday weekday={data.weekday} />
           <Tags tagsByArea={data.tagsByArea} />
@@ -283,6 +284,32 @@ function Checks({ routines }) {
           </div>
         </div>
       ))}
+    </Card>
+  );
+}
+
+function CheckMood({ items }) {
+  if (!items.length) {
+    return (
+      <Card title="어떤 행동이 기분에 도움이 될까" sub="체크한 날 vs 안 한 날의 평균 기분">
+        <div style={s.hint}>같은 항목을 한 날과 안 한 날이 각각 2일 이상 쌓이면 나타나요.</div>
+      </Card>
+    );
+  }
+  return (
+    <Card title="어떤 행동이 기분에 도움이 될까" sub="체크한 날 vs 안 한 날의 평균 기분">
+      {items.map((x) => {
+        const color = x.diff > 0 ? INDIGO : x.diff < 0 ? "#DC5B45" : "#8A93A0";
+        return (
+          <div key={x.name} style={s.relRow}>
+            <span style={{ ...s.relTag, flex: 1 }}>{x.name}</span>
+            <span style={s.relVals}>
+              한 날 {x.yesAvg} · 안 한 날 {x.noAvg}
+            </span>
+            <span style={{ ...s.relDiff, color, minWidth: 36, textAlign: "right" }}>{x.diff > 0 ? `+${x.diff}` : x.diff}</span>
+          </div>
+        );
+      })}
     </Card>
   );
 }

@@ -39,15 +39,16 @@ const SUGGESTED_TAGS = {
 
 const ABOUT_KEY = "powerlog:about";
 const CHECK_KEY = "powerlog:checklist";
-const DEFAULT_CHECKLIST = [
-  "푸쉬업하기",
-  "스쿼트하기",
-  "아이들 꼭 안아주기",
-  "가족에게 고맙다고 말하기",
-  "미룬 일 하나 바로 처리하기",
-  "누군가를 존중하는 말 한마디",
-  "12시 전에 자기",
+// 체크리스트 묶음. 마음 항목은 불안·기분과의 관계를 통계로 보기 좋은 것들
+const CHECK_GROUPS = [
+  { key: "body", label: "몸", items: ["푸쉬업하기", "스쿼트하기", "햇볕 쬐며 10분 걷기", "잠을 푹 잤다", "12시 전에 자기"] },
+  { key: "mind", label: "마음", items: ["3분 심호흡하기", "걱정을 적어서 꺼내놓기", "감사한 일 하나 떠올리기", "불안이 견딜 만했다", "자기 전 30분 폰 멀리하기", "오후엔 카페인 안 먹기"] },
+  { key: "family", label: "가족", items: ["아이들 꼭 안아주기", "가족에게 고맙다고 말하기"] },
+  { key: "people", label: "관계·일", items: ["미룬 일 하나 바로 처리하기", "누군가를 존중하는 말 한마디"] },
 ];
+const DEFAULT_CHECKLIST = CHECK_GROUPS.flatMap((g) => g.items);
+const MIND_ITEMS = CHECK_GROUPS.find((g) => g.key === "mind").items.concat(["햇볕 쬐며 10분 걷기", "잠을 푹 잤다"]);
+const groupOf = (name) => (CHECK_GROUPS.find((g) => g.items.includes(name)) || { key: "etc", label: "내가 추가한 것" });
 const DEFAULT_ABOUT = `성향: 걱정이 많고 불안이 심한 편이에요. 쉽게 주눅들고, 귀찮아하는 경향이 있어요.
 
 살면서 도움이 됐던 원칙:
@@ -175,8 +176,19 @@ function RecordView() {
         const res = await fetch(`/api/backup?key=${encodeURIComponent(CHECK_KEY)}`);
         const row = await res.json();
         if (row && row.data) {
-          const list = JSON.parse(row.data);
-          if (Array.isArray(list)) setChecklist(list);
+          const saved = JSON.parse(row.data);
+          if (Array.isArray(saved)) {
+            // 예전 형식: 새 마음 항목을 한 번만 합쳐서 새 형식으로 저장
+            const merged = [...saved, ...MIND_ITEMS.filter((m) => !saved.includes(m))];
+            setChecklist(merged);
+            fetch("/api/backup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify({ version: 2, items: merged }) }),
+            }).catch(() => {});
+          } else if (saved && Array.isArray(saved.items)) {
+            setChecklist(saved.items);
+          }
         }
       } catch (e) {}
     })();
@@ -187,7 +199,7 @@ function RecordView() {
     fetch("/api/backup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify(list) }),
+      body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify({ version: 2, items: list }) }),
     }).catch(() => {});
   };
 
@@ -587,21 +599,32 @@ function Checklist({ items, checked, onToggle, onSaveList }) {
           {edit ? "완료" : "편집"}
         </button>
       </div>
-      {items.map((it) =>
-        edit ? (
-          <div key={it} style={styles.checkRow}>
-            <span style={{ flex: 1, fontSize: 14.5 }}>{it}</span>
-            <button style={styles.checkDel} onClick={() => onSaveList(items.filter((x) => x !== it))} aria-label={`${it} 삭제`}>
-              <X size={14} color="#DC5B45" />
-            </button>
-          </div>
-        ) : (
-          <button key={it} style={styles.checkRow} onClick={() => onToggle(it)}>
-            <span style={{ ...styles.checkBox, ...(checked[it] ? styles.checkBoxOn : {}) }}>{checked[it] && <Check size={14} color="#fff" />}</span>
-            <span style={{ ...styles.checkText, ...(checked[it] ? styles.checkTextOn : {}) }}>{it}</span>
-          </button>
-        )
-      )}
+      {edit
+        ? items.map((it) => (
+            <div key={it} style={styles.checkRow}>
+              <span style={{ flex: 1, fontSize: 14.5 }}>{it}</span>
+              <button style={styles.checkDel} onClick={() => onSaveList(items.filter((x) => x !== it))} aria-label={`${it} 삭제`}>
+                <X size={14} color="#DC5B45" />
+              </button>
+            </div>
+          ))
+        : [...CHECK_GROUPS, { key: "etc", label: "내가 추가한 것" }].map((g) => {
+            const list = items.filter((it) => groupOf(it).key === g.key);
+            if (!list.length) return null;
+            return (
+              <div key={g.key} style={styles.checkGroup}>
+                <div style={styles.checkGroupLabel}>{g.label}</div>
+                <div style={styles.checkGrid}>
+                  {list.map((it) => (
+                    <button key={it} style={{ ...styles.checkTile, ...(checked[it] ? styles.checkTileOn : {}) }} onClick={() => onToggle(it)}>
+                      <span style={{ ...styles.checkBox, ...(checked[it] ? styles.checkBoxOn : {}) }}>{checked[it] && <Check size={12} color="#fff" />}</span>
+                      <span style={styles.checkTileText}>{it}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
       {edit && (
         <div style={styles.addRow}>
           <input style={styles.addInput} placeholder="새 항목 (예: 산책 20분)" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
@@ -982,8 +1005,14 @@ export const styles = {
   checkCount: { fontSize: 12.5, color: "#4F46E5", fontWeight: 800, marginLeft: 4 },
   editBtn: { border: "none", background: "#F0F2F4", color: "#5B6470", fontSize: 12, fontWeight: 700, padding: "5px 10px", borderRadius: 14 },
   checkRow: { width: "100%", display: "flex", alignItems: "center", gap: 10, border: "none", background: "none", padding: "9px 2px", borderTop: "1px solid #F3F4F6", textAlign: "left" },
-  checkBox: { width: 22, height: 22, borderRadius: 7, border: "2px solid #D7DCE1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  checkBox: { width: 18, height: 18, borderRadius: 6, border: "2px solid #D7DCE1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   checkBoxOn: { background: "#4F46E5", border: "2px solid #4F46E5" },
+  checkGroup: { marginTop: 8 },
+  checkGroupLabel: { fontSize: 11.5, fontWeight: 800, color: "#9AA3AF", marginBottom: 5 },
+  checkGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 },
+  checkTile: { display: "flex", alignItems: "center", gap: 7, border: "1px solid #EEF1F3", background: "#FAFBFC", borderRadius: 10, padding: "9px 8px", textAlign: "left", minWidth: 0 },
+  checkTileOn: { border: "1px solid #C7CCFF", background: "#EEF0FF" },
+  checkTileText: { fontSize: 13, color: "#1F2937", fontWeight: 600, lineHeight: 1.3, wordBreak: "keep-all" },
   checkText: { fontSize: 14.5, color: "#1F2937" },
   checkTextOn: { color: "#9AA3AF", textDecoration: "line-through" },
   checkDel: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
