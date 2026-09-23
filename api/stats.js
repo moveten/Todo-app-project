@@ -21,9 +21,9 @@ export default async function handler(req, res) {
   try {
     const from = (req.query && req.query.from) || null; // YYYY-MM-DD, 없으면 전체
     const rows = from
-      ? await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines
+      ? await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done
                   FROM daily_records WHERE date >= ${from} ORDER BY date`
-      : await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines
+      : await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done
                   FROM daily_records ORDER BY date`;
 
     const scored = rows.filter((r) => r.mood_score != null);
@@ -76,6 +76,35 @@ export default async function handler(req, res) {
       .sort((a, b) => b.days - a.days)
       .slice(0, 6);
 
+    // 7) 영역별 만족도: 평균 + 만족도 높은 날/낮은 날의 기분 차이 (무엇이 기분을 좌우하나)
+    const areaScores = AREAS.map((area) => {
+      const withScore = rows.filter((r) => r.categories && r.categories[area] && r.categories[area].score);
+      const scores = withScore.map((r) => r.categories[area].score);
+      const high = withScore.filter((r) => r.categories[area].score >= 4 && r.mood_score != null).map((r) => r.mood_score);
+      const low = withScore.filter((r) => r.categories[area].score <= 2 && r.mood_score != null).map((r) => r.mood_score);
+      return { area, avg: round1(avg(scores)), days: scores.length, highMood: round1(avg(high)), lowMood: round1(avg(low)), highDays: high.length, lowDays: low.length };
+    });
+
+    // 8) 내일 딱 한 가지: 실행률 + 실행한 날(다음날)의 기분
+    const byDate = Object.fromEntries(rows.map((r) => [r.date, r]));
+    const nextDate = (iso) => {
+      const d = new Date(iso + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString().slice(0, 10);
+    };
+    const checked = rows.filter((r) => r.plan && r.plan_done != null);
+    const doneList = checked.filter((r) => r.plan_done);
+    const moodAfter = (list) => avg(list.map((r) => byDate[nextDate(r.date)]).filter((n) => n && n.mood_score != null).map((n) => n.mood_score));
+    const plans = {
+      made: rows.filter((r) => r.plan).length,
+      checked: checked.length,
+      done: doneList.length,
+      rate: checked.length ? Math.round((doneList.length / checked.length) * 100) : null,
+      moodDone: round1(moodAfter(doneList)),
+      moodNotDone: round1(moodAfter(checked.filter((r) => !r.plan_done))),
+      recent: [...checked].reverse().slice(0, 5).map((r) => ({ date: r.date, plan: r.plan, done: r.plan_done })),
+    };
+
     // 6) 잘한 점 / 보완할 점 모아보기 (최신순)
     const reflections = [];
     [...rows].reverse().forEach((r) => {
@@ -94,6 +123,8 @@ export default async function handler(req, res) {
       tagsByArea,
       tagMood,
       reflections,
+      areaScores,
+      plans,
     });
   } catch (err) {
     console.error('stats API error:', err);

@@ -81,6 +81,8 @@ export default function Stats() {
       ) : (
         <>
           <Summary summary={data.summary} />
+          <AreaScores items={data.areaScores || []} />
+          <Plans plans={data.plans} />
           <MoodTrend points={data.moodTrend} />
           <Weekday weekday={data.weekday} />
           <Tags tagsByArea={data.tagsByArea} />
@@ -181,6 +183,77 @@ function Weekday({ weekday }) {
           );
         })}
       </div>
+    </Card>
+  );
+}
+
+function AreaScores({ items }) {
+  const valid = items.filter((i) => i.days > 0);
+  if (!valid.length) return null;
+  // 만족도 높은 날과 낮은 날의 기분 차이가 가장 큰 영역 = 기분을 가장 좌우하는 영역
+  const gaps = valid.filter((i) => i.highMood != null && i.lowMood != null).map((i) => ({ ...i, gap: i.highMood - i.lowMood }));
+  const key = gaps.length ? gaps.reduce((a, b) => (b.gap > a.gap ? b : a)) : null;
+  return (
+    <Card title="영역별 만족도" sub={key && key.gap > 0 ? `요즘 기분을 가장 좌우하는 건 ${AREA_LABEL[key.area]}이에요` : "영역별 평균 만족도 (5점)"}>
+      {AREA_ORDER.map((a) => {
+        const i = items.find((x) => x.area === a);
+        if (!i || !i.days) return null;
+        return (
+          <div key={a} style={s.progRow}>
+            <div style={s.progHead}>
+              <span style={s.progName}>{AREA_LABEL[a]}</span>
+              <span style={s.progNum}>
+                평균 <b style={{ color: INDIGO }}>{i.avg}</b> · {i.days}일
+              </span>
+            </div>
+            <div style={s.progTrack}>
+              <div style={{ ...s.progFill, width: `${(i.avg / 5) * 100}%` }} />
+            </div>
+            {(i.highMood != null || i.lowMood != null) && (
+              <div style={s.areaMoodNote}>
+                만족도 높은 날 기분 {i.highMood ?? "–"} · 낮은 날 기분 {i.lowMood ?? "–"}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </Card>
+  );
+}
+
+function Plans({ plans }) {
+  if (!plans || !plans.made) return null;
+  return (
+    <Card title="🎯 내일 딱 한 가지" sub={`다짐 ${plans.made}개 중 ${plans.checked}개 확인`}>
+      {plans.rate != null ? (
+        <>
+          <div style={s.planRateRow}>
+            <span style={s.planRate}>{plans.rate}%</span>
+            <span style={s.planRateLabel}>
+              실행률 ({plans.done}/{plans.checked})
+            </span>
+          </div>
+          <div style={s.progTrack}>
+            <div style={{ ...s.progFill, width: `${plans.rate}%` }} />
+          </div>
+          {(plans.moodDone != null || plans.moodNotDone != null) && (
+            <div style={s.areaMoodNote}>
+              다짐을 실행한 날 기분 {plans.moodDone ?? "–"} · 못한 날 기분 {plans.moodNotDone ?? "–"}
+            </div>
+          )}
+          <div style={{ marginTop: 8 }}>
+            {plans.recent.map((p) => (
+              <div key={p.date} style={s.planItem}>
+                <span>{p.done ? "✅" : "❌"}</span>
+                <span style={s.planItemText}>{p.plan}</span>
+                <span style={s.planItemDate}>{fmtShort(p.date)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div style={s.hint}>다음 날 "했어요/못했어요"를 체크하면 실행률이 나타나요.</div>
+      )}
     </Card>
   );
 }
@@ -297,6 +370,13 @@ const s = {
   progNum: { fontSize: 12, color: "#8A93A0" },
   progTrack: { height: 8, background: "#F0F2F4", borderRadius: 6, overflow: "hidden" },
   progFill: { height: "100%", background: INDIGO, borderRadius: 6 },
+  areaMoodNote: { fontSize: 11.5, color: "#8A93A0", marginTop: 4 },
+  planRateRow: { display: "flex", alignItems: "baseline", gap: 8, margin: "6px 0" },
+  planRate: { fontSize: 24, fontWeight: 800, color: INDIGO },
+  planRateLabel: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
+  planItem: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid #F3F4F6", fontSize: 13 },
+  planItemText: { flex: 1, color: "#1F2937" },
+  planItemDate: { fontSize: 11.5, color: "#9AA3AF" },
   areaLabel: { fontSize: 12, fontWeight: 800, color: "#5B6470", marginTop: 8 },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
   tagChip: { background: "#EEF0FF", color: INDIGO, fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20 },
