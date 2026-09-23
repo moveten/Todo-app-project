@@ -126,14 +126,17 @@ function RecordView() {
 
   useEffect(() => {
     loadDay(date);
+    setMissing([]);
   }, [date, loadDay]);
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory, savedFlash]);
 
-  const setCat = (key, patch) =>
+  const setCat = (key, patch) => {
+    if (patch.score) setMissing((m) => m.filter((k) => k !== key));
     setForm((f) => ({ ...f, cats: { ...f.cats, [key]: { ...f.cats[key], ...patch } } }));
+  };
 
   const toggleTag = (key, tag) =>
     setForm((f) => {
@@ -142,7 +145,21 @@ function RecordView() {
       return { ...f, cats: { ...f.cats, [key]: { ...f.cats[key], tags: next } } };
     });
 
+  const [missing, setMissing] = useState([]); // 만족도를 안 고른 영역
+
+  const checkScores = () => {
+    const miss = AREAS.filter((a) => !form.cats[a.key].score).map((a) => a.key);
+    setMissing(miss);
+    if (miss.length) {
+      const names = AREAS.filter((a) => miss.includes(a.key)).map((a) => a.label).join(", ");
+      window.alert(`${names}의 만족도(1~5)를 골라야 저장할 수 있어요.`);
+      return false;
+    }
+    return true;
+  };
+
   const save = async () => {
+    if (!checkScores()) return false;
     setSaving(true);
     try {
       const clean = (t) => (t && t.replace(/[•\s]/g, "") ? t.replace(/\n?•\s*$/, "").trim() : "");
@@ -166,8 +183,10 @@ function RecordView() {
       if (!res.ok) throw new Error("save failed");
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1600);
+      return true;
     } catch (e) {
       window.alert("저장에 실패했어요. 인터넷 연결을 확인해주세요.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -194,6 +213,7 @@ function RecordView() {
   };
 
   const askClaude = () => {
+    if (!checkScores()) return;
     const text = buildPrompt(date, form, history);
     save();
     copyText(text).then((ok) => showToast(ok ? "복사됐어요! Claude에 붙여넣기 하세요" : "복사에 실패했어요. 다시 눌러주세요"));
@@ -265,7 +285,7 @@ function RecordView() {
             )}
 
             {AREAS.map((a) => (
-              <AreaCard key={a.key} area={a} value={form.cats[a.key]} onChange={(patch) => setCat(a.key, patch)} />
+              <AreaCard key={a.key} area={a} value={form.cats[a.key]} missing={missing.includes(a.key)} onChange={(patch) => setCat(a.key, patch)} />
             ))}
 
             <TagPicker cats={form.cats} onToggle={toggleTag} />
@@ -419,13 +439,13 @@ function AutoTextarea({ value, onChange, placeholder, minRows = 1, style, bullet
 }
 
 // ---------------------------------------------------------------------------
-function AreaCard({ area, value, onChange }) {
+function AreaCard({ area, value, onChange, missing }) {
   return (
-    <div style={styles.section}>
+    <div style={{ ...styles.section, ...(missing ? styles.sectionMissing : {}) }}>
       <div style={styles.sectionHead}>
         <div style={styles.cardTitle}>{area.label}</div>
         <div style={styles.scoreRow} aria-label={`${area.label} 만족도`}>
-          <span style={styles.scoreLabel}>만족도</span>
+          <span style={{ ...styles.scoreLabel, ...(missing ? { color: "#DC5B45" } : {}) }}>{missing ? "만족도 선택!" : "만족도"}</span>
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
@@ -552,14 +572,14 @@ function buildPrompt(date, form, history) {
     });
   }
   lines.push("");
-  lines.push("아래 5가지 관점으로 각각 2~3문장씩, 따뜻하지만 구체적으로 답해주세요.");
-  lines.push("마크다운 기호(**, #, 표)는 쓰지 말고, 각 항목은 아래 이모지 제목으로 시작해주세요.");
-  lines.push("👏 오늘의 칭찬: 잘한 점을 구체적으로 짚어서 칭찬");
-  lines.push("🧠 마음 전문가: 정신건강의학 전문가의 관점에서 감정·스트레스·회복을 살피고 도움이 될 말");
-  lines.push("💼 업무의 달인: 업무 기록을 보고 일하는 방식·우선순위에 대한 실전 팁");
-  lines.push("✍️ 최고의 기록자: 기록을 더 쓸모 있게 남기는 요령");
-  lines.push("🎯 내일 딱 한 가지: 내일 바로 실천할 작은 행동 하나 (한 문장으로)");
-  lines.push("진단은 하지 말고, 기록에 많이 힘든 내용이 있으면 해결책보다 공감을 먼저 하고 믿을 만한 사람이나 전문가와 이야기해보길 권해주세요.");
+  lines.push("위 기록을 바탕으로 조언을 한 문단으로 써주세요. 형식은 이렇게 해주세요.");
+  lines.push("1) 한 문단(8~10문장) 안에 아래 내용을 자연스럽게 이어서 담아주세요.");
+  lines.push("- 먼저 오늘 잘한 점을 구체적으로 짚어 칭찬");
+  lines.push("- 정신건강의학 전문가의 관점에서 오늘의 감정·스트레스·에너지 상태를 상세히 분석 (가족·업무·나 만족도와 기분의 관계, 최근 흐름에서 보이는 패턴 포함)");
+  lines.push("- 업무의 달인 관점에서 업무 기록을 상세히 분석 (일하는 방식, 우선순위, 보완할 점의 원인과 개선법)");
+  lines.push("- 두 분석을 종합해서 지금 가장 중요한 것이 무엇인지 정리");
+  lines.push("2) 문단 다음 줄에, 종합 결론으로 딱 한 줄만 이렇게 써주세요: 🎯 내일 딱 한 가지: (내일 바로 실천할 작은 행동 한 문장)");
+  lines.push("마크다운 기호(**, #, 목록, 표)는 쓰지 말아주세요. 진단은 하지 말고, 기록에 많이 힘든 내용이 있으면 해결책보다 공감을 먼저 하고 믿을 만한 사람이나 전문가와 이야기해보길 권해주세요.");
   return lines.join("\n");
 }
 
@@ -695,7 +715,7 @@ function OnePage({ date, form, onClose }) {
               <div style={page.adviceTitle}>Claude 조언</div>
               {advice
                 .split("\n")
-                .filter((l) => l.trim())
+                .filter((l) => l.trim() && !(form.plan && l.includes("🎯")))
                 .map((l, i) => (
                   <div key={i} style={adviceHead.test(l.trim()) ? page.adviceHead : page.adviceLine}>
                     {l.trim()}
@@ -777,6 +797,7 @@ export const styles = {
   planBtnYes: { background: "#4F46E5", border: "1px solid #4F46E5" },
   planBtnNo: { background: "#6B7280", border: "1px solid #6B7280" },
   section: { background: "#FFFFFF", borderRadius: 14, padding: "12px 14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
+  sectionMissing: { boxShadow: "0 0 0 1.5px #F2B8AE inset, 0 1px 3px rgba(15,23,42,0.06)" },
   sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   cardTitle: { fontSize: 15, fontWeight: 800, color: "#1F2937" },
   scoreRow: { display: "flex", alignItems: "center", gap: 4 },
