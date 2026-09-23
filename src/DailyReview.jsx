@@ -163,6 +163,10 @@ export default function DailyReview() {
   return (
     <div style={styles.app}>
       <div style={styles.header}>
+        <div style={styles.brandRow}>
+          <span style={styles.brandName}>파워로그</span>
+          <span style={styles.brandSub}>가족과 일, 하나의 기록</span>
+        </div>
         <div style={styles.dateNavRow}>
           <button style={styles.navBtn} onClick={() => setDate(addDays(date, -1))} aria-label="이전 날">
             <ChevronLeft size={18} color="#5B6470" />
@@ -189,7 +193,7 @@ export default function DailyReview() {
               <span style={{ ...styles.moodBtn, ...(form.mood === m.emoji ? styles.moodBtnActive : {}) }}>
                 {m.emoji}
               </span>
-              <span style={{ ...styles.moodLabel, ...(form.mood === m.emoji ? { color: "#0D9488" } : {}) }}>
+              <span style={{ ...styles.moodLabel, ...(form.mood === m.emoji ? { color: "#4F46E5" } : {}) }}>
                 {m.label}
               </span>
             </button>
@@ -200,7 +204,7 @@ export default function DailyReview() {
       <div style={styles.body}>
         {loading ? (
           <div style={styles.loadingWrap}>
-            <Loader2 size={20} color="#0D9488" />
+            <Loader2 size={20} color="#4F46E5" />
           </div>
         ) : (
           <>
@@ -431,15 +435,18 @@ function TextSection({ label, placeholder, value, onChange }) {
 const styles = {
   app: { minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", color: "#1F2937" },
   header: { padding: "20px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
+  brandRow: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 },
+  brandName: { fontSize: 15, fontWeight: 800, color: "#4F46E5", letterSpacing: 0.3 },
+  brandSub: { fontSize: 11.5, color: "#9AA3AF", fontWeight: 600 },
   dateNavRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   navBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   dateWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
   dateBig: { fontSize: 18, fontWeight: 700, color: "#1F2937" },
-  todayBtn: { background: "#EAF6F4", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, color: "#0D9488" },
+  todayBtn: { background: "#EEF0FF", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, color: "#4F46E5" },
   moodRow: { display: "flex", justifyContent: "center", gap: 8, marginTop: 16 },
   moodCol: { background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: 0 },
   moodBtn: { fontSize: 22, background: "#F0F2F4", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" },
-  moodBtnActive: { background: "#EAF6F4", boxShadow: "0 0 0 2px #0D9488 inset" },
+  moodBtnActive: { background: "#EEF0FF", boxShadow: "0 0 0 2px #4F46E5 inset" },
   moodLabel: { fontSize: 11, color: "#9AA3AF", fontWeight: 600 },
   body: { flex: 1, padding: "18px 16px 60px" },
   loadingWrap: { display: "flex", justifyContent: "center", padding: "60px 0" },
@@ -449,24 +456,24 @@ const styles = {
   iconBtn: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0 },
   iconBtnText: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
   textarea: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", fontSize: 16, color: "#1F2937", background: "transparent", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
-  subLabelGood: { fontSize: 12, fontWeight: 700, color: "#0D9488", marginTop: 8, marginBottom: 4 },
+  subLabelGood: { fontSize: 12, fontWeight: 700, color: "#4F46E5", marginTop: 8, marginBottom: 4 },
   subLabelImprove: { fontSize: 12, fontWeight: 700, color: "#C27C0E", marginTop: 8, marginBottom: 4 },
   subTextarea: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "8px 10px", outline: "none", fontSize: 16, color: "#1F2937", background: "#FAFBFC", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
   tagChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20 },
-  tagChipOn: { background: "#EAF6F4", borderColor: "#BFE5DF", color: "#0D9488" },
+  tagChipOn: { background: "#EEF0FF", borderColor: "#C7CCFF", color: "#4F46E5" },
   routineChip: { display: "inline-flex", alignItems: "center", border: "1px solid #E5E9EC", background: "#fff", color: "#5B6470", fontSize: 13.5, fontWeight: 600, padding: "8px 14px", borderRadius: 20 },
-  routineChipOn: { background: "#0D9488", borderColor: "#0D9488", color: "#fff" },
+  routineChipOn: { background: "#4F46E5", borderColor: "#4F46E5", color: "#fff" },
   chipEditing: { display: "inline-flex", alignItems: "center", gap: 4, border: "1px dashed #D7DCE1", background: "#fff", color: "#5B6470", fontSize: 13.5, fontWeight: 600, padding: "7px 8px 7px 12px", borderRadius: 20 },
   chipRemove: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
   addRow: { display: "flex", gap: 6, marginTop: 8 },
   addInput: { flex: 1, minWidth: 0, border: "1px solid #E5E9EC", borderRadius: 10, padding: "7px 10px", fontSize: 16, outline: "none", fontFamily: "inherit" },
-  addBtn: { background: "#0D9488", border: "none", borderRadius: 10, width: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  saveBtn: { width: "100%", border: "none", background: "#0D9488", color: "#fff", fontWeight: 700, fontSize: 14.5, padding: "13px 0", borderRadius: 12, marginTop: 6, marginBottom: 22, display: "flex", alignItems: "center", justifyContent: "center" },
+  addBtn: { background: "#4F46E5", border: "none", borderRadius: 10, width: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  saveBtn: { width: "100%", border: "none", background: "#4F46E5", color: "#fff", fontWeight: 700, fontSize: 14.5, padding: "13px 0", borderRadius: 12, marginTop: 6, marginBottom: 22, display: "flex", alignItems: "center", justifyContent: "center" },
   historyLabel: { fontSize: 12.5, color: "#8A93A0", fontWeight: 700, marginBottom: 8 },
   historyRow: { width: "100%", display: "flex", alignItems: "center", gap: 8, background: "#FFFFFF", border: "none", borderRadius: 10, padding: "9px 12px", marginBottom: 6, boxShadow: "0 1px 2px rgba(15,23,42,0.05)" },
-  historyRowActive: { boxShadow: "0 0 0 1.5px #0D9488 inset" },
+  historyRowActive: { boxShadow: "0 0 0 1.5px #4F46E5 inset" },
   historyMood: { fontSize: 15 },
   historyDate: { fontSize: 13, color: "#5B6470", fontWeight: 600, flex: 1, textAlign: "left" },
-  historyRoutine: { fontSize: 11.5, color: "#0D9488", fontWeight: 700, background: "#EAF6F4", padding: "2px 8px", borderRadius: 10 },
+  historyRoutine: { fontSize: 11.5, color: "#4F46E5", fontWeight: 700, background: "#EEF0FF", padding: "2px 8px", borderRadius: 10 },
 };
