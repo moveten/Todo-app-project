@@ -37,6 +37,15 @@ const SUGGESTED_TAGS = {
   self: ["운동", "독서", "휴식", "공부", "취미", "친구"],
 };
 
+const ABOUT_KEY = "powerlog:about";
+const DEFAULT_ABOUT = `성향: 걱정이 많고 불안이 심한 편이에요. 쉽게 주눅들고, 귀찮아하는 경향이 있어요.
+
+살면서 도움이 됐던 원칙:
+• 무시당할 각오 (침착맨): 무시당하거나 거절당할 수 있다는 걸 미리 각오하면 덜 움츠러든다
+• 빨리 처리하되 부정적 피드백을 두려워 말라
+• 남을 존중하기: 사람의 뇌는 남을 존중하는 것과 나를 존중하는 것을 잘 구분하지 못한다고 한다. 그래서 남을 미워할 때보다 존중하려고 할 때 기분이 좋아진다
+• 부모에게는 딱 10년: 아이들이 10살이 넘으면 부모와 잘 얘기하려 하지 않으니, 아이가 먼저 다가오는 10살까지의 시간을 소중히 여기자`;
+
 const emptyCat = () => ({ text: "", good: "", improve: "", tags: [], score: null });
 const emptyCats = () => ({ family: emptyCat(), work: emptyCat(), self: emptyCat() });
 const emptyForm = () => ({ mood: "🙂", cats: emptyCats(), reflection: {}, routines: {}, advice: "", plan: "" });
@@ -146,6 +155,33 @@ function RecordView() {
     });
 
   const [missing, setMissing] = useState([]); // 만족도를 안 고른 영역
+  const [about, setAbout] = useState(DEFAULT_ABOUT); // 조언에 항상 반영할 "나에 대해"
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [aboutSaved, setAboutSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/backup?key=${encodeURIComponent(ABOUT_KEY)}`);
+        const row = await res.json();
+        if (row && typeof row.data === "string") setAbout(row.data);
+      } catch (e) {}
+    })();
+  }, []);
+
+  const saveAbout = async () => {
+    try {
+      await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: ABOUT_KEY, value: about }),
+      });
+      setAboutSaved(true);
+      setTimeout(() => setAboutSaved(false), 1500);
+    } catch (e) {
+      window.alert("저장에 실패했어요. 인터넷 연결을 확인해주세요.");
+    }
+  };
 
   const checkScores = () => {
     const miss = AREAS.filter((a) => !form.cats[a.key].score).map((a) => a.key);
@@ -214,7 +250,7 @@ function RecordView() {
 
   const askClaude = () => {
     if (!checkScores()) return;
-    const text = buildPrompt(date, form, history);
+    const text = buildPrompt(date, form, history, about);
     save();
     copyText(text).then((ok) => showToast(ok ? "복사됐어요! Claude에 붙여넣기 하세요" : "복사에 실패했어요. 다시 눌러주세요"));
     window.open("https://claude.ai/new", "_blank");
@@ -308,6 +344,18 @@ function RecordView() {
                 <Sparkles size={15} style={{ marginRight: 6 }} />① 기록 복사하고 Claude 열기
               </button>
               <div style={styles.adviceHint}>Claude의 답변을 길게 눌러 복사한 뒤, 아래 칸에 붙여넣고 저장하세요.</div>
+              <button style={styles.aboutToggle} onClick={() => setAboutOpen((o) => !o)}>
+                🙋 나에 대해 <span style={styles.aboutToggleSub}>· 조언할 때 항상 반영돼요</span>
+                <ChevronDown size={15} style={{ marginLeft: "auto", transform: aboutOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+              </button>
+              {aboutOpen && (
+                <div style={{ marginBottom: 10 }}>
+                  <AutoTextarea value={about} onChange={setAbout} minRows={6} bullet={false} placeholder="내 성향, 도움이 됐던 조언이나 원칙" />
+                  <button style={styles.adviceSaveBtn} onClick={saveAbout}>
+                    {aboutSaved ? "저장됨" : "나에 대해 저장"}
+                  </button>
+                </div>
+              )}
               <AutoTextarea value={form.advice} onChange={onAdvice} placeholder="② 여기에 Claude 조언 붙여넣기" minRows={3} bullet={false} />
               <div style={styles.planLabel}>🎯 내일 딱 한 가지</div>
               <AutoTextarea
@@ -543,7 +591,7 @@ function extractPlan(advice) {
   return t;
 }
 
-function buildPrompt(date, form, history) {
+function buildPrompt(date, form, history, about) {
   const lines = [];
   lines.push(`[파워로그] ${fmtFull(date)} 하루 기록이에요. 아래 기록을 보고 조언해주세요.`);
   lines.push("");
@@ -570,6 +618,12 @@ function buildPrompt(date, form, history) {
       const planInfo = r.plan ? ` | 다짐: ${clip(r.plan, 30)}${r.plan_done === true ? " (실행)" : r.plan_done === false ? " (못함)" : ""}` : "";
       lines.push(`- ${fmtFull(r.date)} 기분 ${r.mood || "-"}${imp.length ? ` | 보완할 점: ${imp.join(", ")}` : ""}${planInfo}`);
     });
+  }
+  if (about && about.trim()) {
+    lines.push("");
+    lines.push("(나에 대해: 조언할 때 꼭 반영해주세요)");
+    lines.push(about.trim());
+    lines.push("→ 내 성향을 이해하고, 위 원칙 중 오늘 기록과 맞닿는 것을 1~2개 골라 자연스럽게 연결해주세요. 매번 전부 나열하지는 말아주세요. 불안하거나 주눅든 부분이 보이면 다그치지 말고, 작게 시작할 수 있는 방향으로 말해주세요.");
   }
   lines.push("");
   lines.push("위 기록을 바탕으로 조언을 한 문단으로 써주세요. 형식은 이렇게 해주세요.");
@@ -822,6 +876,8 @@ export const styles = {
   saveBtn: { width: "100%", border: "none", background: "#4F46E5", color: "#fff", fontWeight: 700, fontSize: 14.5, padding: "13px 0", borderRadius: 12, marginTop: 6, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center" },
   claudeBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "#1F2937", color: "#fff", fontSize: 14, fontWeight: 700, padding: "11px 0", borderRadius: 10, marginTop: 8 },
   adviceHint: { fontSize: 12, color: "#8A93A0", margin: "8px 0", lineHeight: 1.5 },
+  aboutToggle: { width: "100%", display: "flex", alignItems: "center", border: "1px solid #EEF1F3", background: "#FAFBFC", borderRadius: 10, padding: "9px 10px", fontSize: 13, fontWeight: 800, color: "#1F2937", marginBottom: 8 },
+  aboutToggleSub: { fontSize: 11.5, fontWeight: 600, color: "#9AA3AF", marginLeft: 4 },
   planLabel: { fontSize: 12.5, fontWeight: 800, color: "#1F2937", margin: "10px 0 4px" },
   adviceSaveBtn: { width: "100%", border: "1px solid #C7CCFF", background: "#EEF0FF", color: "#4F46E5", fontSize: 13.5, fontWeight: 700, padding: "10px 0", borderRadius: 10, marginTop: 8 },
   pageBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #E5E9EC", background: "#fff", color: "#1F2937", fontSize: 14, fontWeight: 700, padding: "12px 0", borderRadius: 12, marginBottom: 22 },
