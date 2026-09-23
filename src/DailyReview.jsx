@@ -5,7 +5,13 @@ import Stats from "./Stats.jsx";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const todayISO = () => toISO(new Date());
+// 하루 기준 시간: 새벽 4시 전까지는 전날로 봄 (밤늦게 쓰다가 자정을 넘겨도 그날 기록으로 유지)
+const DAY_START_HOUR = 4;
+const todayISO = () => {
+  const d = new Date();
+  if (d.getHours() < DAY_START_HOUR) d.setDate(d.getDate() - 1);
+  return toISO(d);
+};
 const addDays = (iso, days) => {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
@@ -41,13 +47,11 @@ const ABOUT_KEY = "powerlog:about";
 const CHECK_KEY = "powerlog:checklist";
 // 체크리스트 묶음. 마음 항목은 불안·기분과의 관계를 통계로 보기 좋은 것들
 const CHECK_GROUPS = [
-  { key: "body", label: "몸", items: ["푸쉬업하기", "스쿼트하기", "햇볕 쬐며 10분 걷기", "잠을 푹 잤다", "12시 전에 자기"] },
-  { key: "mind", label: "마음", items: ["3분 심호흡하기", "걱정을 적어서 꺼내놓기", "감사한 일 하나 떠올리기", "불안이 견딜 만했다", "자기 전 30분 폰 멀리하기", "오후엔 카페인 안 먹기"] },
-  { key: "family", label: "가족", items: ["아이들 꼭 안아주기", "가족에게 고맙다고 말하기"] },
-  { key: "people", label: "관계·일", items: ["미룬 일 하나 바로 처리하기", "누군가를 존중하는 말 한마디"] },
+  { key: "body", label: "운동", items: ["스쿼트", "푸시업", "암컬"] },
+  { key: "grow", label: "성장", items: ["책읽기"] },
 ];
 const DEFAULT_CHECKLIST = CHECK_GROUPS.flatMap((g) => g.items);
-const MIND_ITEMS = CHECK_GROUPS.find((g) => g.key === "mind").items.concat(["햇볕 쬐며 10분 걷기", "잠을 푹 잤다"]);
+const CHECK_VERSION = 3;
 const groupOf = (name) => (CHECK_GROUPS.find((g) => g.items.includes(name)) || { key: "etc", label: "내가 추가한 것" });
 const DEFAULT_ABOUT = `성향: 걱정이 많고 불안이 심한 편이에요. 쉽게 주눅들고, 귀찮아하는 경향이 있어요.
 
@@ -86,6 +90,27 @@ export default function DailyReview() {
   );
 }
 
+// 저장 전 임시 보관 (앱이 새로 열리거나 날짜가 넘어가도 쓰던 글이 사라지지 않게)
+const draftKey = (d) => `powerlog:draft:${d}`;
+const readDraft = (d) => {
+  try {
+    const v = window.localStorage.getItem(draftKey(d));
+    return v ? JSON.parse(v) : null;
+  } catch (e) {
+    return null;
+  }
+};
+const writeDraft = (d, f) => {
+  try {
+    window.localStorage.setItem(draftKey(d), JSON.stringify(f));
+  } catch (e) {}
+};
+const clearDraft = (d) => {
+  try {
+    window.localStorage.removeItem(draftKey(d));
+  } catch (e) {}
+};
+
 const pickCat = (c, k) => ({
   text: (c && c[k] && c[k].text) || "",
   good: (c && c[k] && c[k].good) || "",
@@ -104,6 +129,7 @@ function RecordView() {
   const [history, setHistory] = useState([]);
   const [showPage, setShowPage] = useState(false);
   const [toast, setToast] = useState("");
+  const loadedRef = useRef(""); // 서버에서 불러온(=저장된) 상태
 
   const loadDay = useCallback(async (d) => {
     setLoading(true);
@@ -114,19 +140,28 @@ function RecordView() {
       ]);
       const row = await res.json();
       const prev = await prevRes.json();
+      let serverForm = emptyForm();
       setPrevPlan(prev && prev.plan ? { date: prev.date, plan: prev.plan, done: prev.plan_done } : null);
       if (row && row.categories) {
         const c = row.categories;
-        setForm({
+        serverForm = {
           mood: row.mood || "🙂",
           cats: { family: pickCat(c, "family"), work: pickCat(c, "work"), self: pickCat(c, "self") },
           reflection: row.reflection || {},
           routines: row.routines || {},
           advice: row.advice || "",
           plan: row.plan || "",
-        });
+        };
+      }
+      loadedRef.current = JSON.stringify(serverForm);
+      const draft = readDraft(d);
+      if (draft && JSON.stringify(draft) !== loadedRef.current) {
+        setForm(draft);
+        setToast("저장 안 된 내용을 불러왔어요");
+        setTimeout(() => setToast(""), 3000);
       } else {
-        setForm(emptyForm());
+        clearDraft(d);
+        setForm(serverForm);
       }
     } catch (e) {
       setForm(emptyForm());
@@ -153,6 +188,11 @@ function RecordView() {
     loadHistory();
   }, [loadHistory, savedFlash]);
 
+  useEffect(() => {
+    if (loading) return;
+    if (JSON.stringify(form) !== loadedRef.current) writeDraft(date, form);
+  }, [form, date, loading]);
+
   const setCat = (key, patch) => {
     if (patch.score) setMissing((m) => m.filter((k) => k !== key));
     setForm((f) => ({ ...f, cats: { ...f.cats, [key]: { ...f.cats[key], ...patch } } }));
@@ -177,17 +217,16 @@ function RecordView() {
         const row = await res.json();
         if (row && row.data) {
           const saved = JSON.parse(row.data);
-          if (Array.isArray(saved)) {
-            // 예전 형식: 새 마음 항목을 한 번만 합쳐서 새 형식으로 저장
-            const merged = [...saved, ...MIND_ITEMS.filter((m) => !saved.includes(m))];
-            setChecklist(merged);
+          if (saved && saved.version >= CHECK_VERSION && Array.isArray(saved.items)) {
+            setChecklist(saved.items);
+          } else {
+            // 예전 목록은 새 기본 목록(스쿼트·푸시업·암컬·책읽기)으로 교체
+            setChecklist(DEFAULT_CHECKLIST);
             fetch("/api/backup", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify({ version: 2, items: merged }) }),
+              body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify({ version: CHECK_VERSION, items: DEFAULT_CHECKLIST }) }),
             }).catch(() => {});
-          } else if (saved && Array.isArray(saved.items)) {
-            setChecklist(saved.items);
           }
         }
       } catch (e) {}
@@ -199,7 +238,7 @@ function RecordView() {
     fetch("/api/backup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify({ version: 2, items: list }) }),
+      body: JSON.stringify({ key: CHECK_KEY, value: JSON.stringify({ version: CHECK_VERSION, items: list }) }),
     }).catch(() => {});
   };
 
@@ -264,6 +303,8 @@ function RecordView() {
         }),
       });
       if (!res.ok) throw new Error("save failed");
+      loadedRef.current = JSON.stringify(form);
+      clearDraft(date);
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1600);
       return true;
@@ -627,7 +668,7 @@ function Checklist({ items, checked, onToggle, onSaveList }) {
           })}
       {edit && (
         <div style={styles.addRow}>
-          <input style={styles.addInput} placeholder="새 항목 (예: 산책 20분)" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          <input style={styles.addInput} placeholder="새 항목 (예: 플랭크)" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
           <button style={styles.addBtn} onClick={add} aria-label="항목 추가">
             <Plus size={15} color="#fff" />
           </button>
