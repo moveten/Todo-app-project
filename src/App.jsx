@@ -13,6 +13,12 @@ const storage = {
   async set(key, value) {
     try {
       window.localStorage.setItem(key, value);
+      // 서버(Neon DB) 백업: 실패해도 로컬 저장에는 영향 없음 (best-effort)
+      fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+      }).catch(() => {});
       return { key, value };
     } catch (e) {
       return null;
