@@ -1,6 +1,55 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 
 // 브라우저 localStorage 기반 저장소 (Claude 아티팩트의 window.storage를 대체)
+
+// ---- 서버 백업 동기화 (하이브리드: 디바운스 + 화면 전환/종료 시 즉시 전송) ----
+const SYNC_DEBOUNCE_MS = 3000;
+const pendingSync = new Map(); // key -> value (마지막 값만 유지)
+let syncTimer = null;
+
+function flushServerSync() {
+  if (syncTimer) {
+    clearTimeout(syncTimer);
+    syncTimer = null;
+  }
+  if (pendingSync.size === 0) return;
+  const entries = Array.from(pendingSync.entries());
+  pendingSync.clear();
+  entries.forEach(([key, value]) => {
+    try {
+      const payload = JSON.stringify({ key, value });
+      // 페이지가 닫히는 도중에는 fetch보다 sendBeacon이 더 안정적으로 전송됨
+      if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: "application/json" });
+        const ok = navigator.sendBeacon("/api/backup", blob);
+        if (ok) return;
+      }
+      fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {});
+    } catch (e) {
+      // 서버 백업 실패는 무시 (로컬 저장에는 영향 없음)
+    }
+  });
+}
+
+function queueServerSync(key, value) {
+  pendingSync.set(key, value);
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(flushServerSync, SYNC_DEBOUNCE_MS);
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) flushServerSync();
+  });
+  window.addEventListener("pagehide", flushServerSync);
+  window.addEventListener("beforeunload", flushServerSync);
+}
+
 const storage = {
   async get(key) {
     try {
@@ -13,12 +62,8 @@ const storage = {
   async set(key, value) {
     try {
       window.localStorage.setItem(key, value);
-      // 서버(Neon DB) 백업: 실패해도 로컬 저장에는 영향 없음 (best-effort)
-      fetch("/api/backup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, value }),
-      }).catch(() => {});
+      // 서버(Neon DB) 백업: 즉시 보내지 않고 모아뒀다가(디바운스) 화면 전환/종료 시 전송
+      queueServerSync(key, value);
       return { key, value };
     } catch (e) {
       return null;
@@ -381,21 +426,12 @@ export default function App() {
       }
     }
     setSaveError(!ok);
-    if (ok) {
-      // 메인 저장이 성공했을 때만 백업도 최신 상태로 갱신
-      try {
-        await storage.set(STORAGE_BACKUP_KEY, JSON.stringify(next));
-      } catch (e) {
-        // 백업 저장 실패는 무시
-      }
-    }
   };
 
   const persistPresets = async (next) => {
     setPresets(next);
     try {
-      const res = await storage.set(PRESET_KEY, JSON.stringify(next));
-      if (res) await storage.set(PRESET_BACKUP_KEY, JSON.stringify(next));
+      await storage.set(PRESET_KEY, JSON.stringify(next));
     } catch (e) {
       // 프리셋 저장 실패는 조용히 무시 (핵심 데이터가 아님)
     }
