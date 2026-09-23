@@ -45,17 +45,45 @@ const MOODS = [
   { emoji: "😣", label: "힘듦" },
 ];
 
-export const AREAS = [
-  { key: "family", label: "가족", hint: "오늘 가족과 있었던 일" },
-  { key: "work", label: "업무", hint: "오늘 업무에서 있었던 일" },
-  { key: "self", label: "나", hint: "오늘 나에 대해 한 줄 (컨디션, 느낀 점 등)", simple: true },
-];
-
-const SUGGESTED_TAGS = {
-  family: ["아이", "배우자", "부모님", "외식", "나들이", "병원"],
-  work: ["회의", "보고서", "민원", "출장", "교육", "야근"],
-  self: ["운동", "독서", "휴식", "공부", "취미", "친구"],
+// 항목 종류별 프리셋: 어떤 칸을 보여줄지, 점수가 필요한지, 기본 태그
+export const TYPES = {
+  family: {
+    label: "가족", emoji: "👨‍👩‍👧", score: true,
+    fields: [
+      { k: "did", label: "한 일", ph: "가족과 함께 한 일" },
+      { k: "feel", label: "느낀 점", ph: "어떤 마음이 들었나요" },
+    ],
+    tags: ["아이", "배우자", "부모님", "외식", "나들이", "병원"],
+  },
+  work: {
+    label: "업무", emoji: "💼", score: true,
+    fields: [
+      { k: "did", label: "한 일", ph: "오늘 처리한 일" },
+      { k: "improve", label: "보완할 점", ph: "다음엔 이렇게" },
+    ],
+    tags: ["회의", "보고서", "민원", "출장", "교육", "야근"],
+  },
+  daily: {
+    label: "일상", emoji: "☀️", score: true,
+    fields: [
+      { k: "did", label: "한 일", ph: "오늘 나를 위해 한 일" },
+      { k: "feel", label: "느낀 점", ph: "컨디션, 느낀 점" },
+    ],
+    tags: ["운동", "독서", "휴식", "산책", "취미", "공부"],
+  },
+  friend: {
+    label: "친구", emoji: "🤝", score: false,
+    fields: [
+      { k: "who", label: "누구랑", ph: "만난 사람", single: true },
+      { k: "where", label: "어디서", ph: "장소", single: true },
+      { k: "what", label: "뭐 했는지", ph: "함께 한 일, 나눈 이야기" },
+    ],
+    tags: ["밥", "카페", "술", "운동", "통화", "모임"],
+  },
 };
+export const TYPE_ORDER = ["family", "work", "daily", "friend"];
+const DEFAULT_TYPES = ["family", "work", "daily"]; // 새 날짜를 열면 기본으로 나오는 카드
+const TAGS_KEY = "powerlog:tags";
 
 const ABOUT_KEY = "powerlog:about";
 const CHECK_KEY = "powerlog:checklist";
@@ -75,9 +103,31 @@ const DEFAULT_ABOUT = `성향: 걱정이 많고 불안이 심한 편이에요. �
 • 남을 존중하기: 사람의 뇌는 남을 존중하는 것과 나를 존중하는 것을 잘 구분하지 못한다고 한다. 그래서 남을 미워할 때보다 존중하려고 할 때 기분이 좋아진다
 • 부모에게는 딱 10년: 아이들이 10살이 넘으면 부모와 잘 얘기하려 하지 않으니, 아이가 먼저 다가오는 10살까지의 시간을 소중히 여기자`;
 
-const emptyCat = () => ({ text: "", good: "", improve: "", tags: [], score: null });
-const emptyCats = () => ({ family: emptyCat(), work: emptyCat(), self: emptyCat() });
-const emptyForm = () => ({ mood: "🙂", cats: emptyCats(), reflection: {}, routines: {}, advice: "", plan: "" });
+let idSeq = 0;
+const newId = () => `e${Date.now().toString(36)}${(idSeq++).toString(36)}`;
+const newEntry = (type) => ({ id: newId(), type, score: null, fields: {}, tags: [] });
+const emptyForm = () => ({ mood: "🙂", entries: DEFAULT_TYPES.map(newEntry), reflection: {}, routines: {}, advice: "", plan: "" });
+
+// 예전 구조(가족/업무/나 고정 칸)를 새 구조(항목 목록)로 변환
+function legacyToEntries(c) {
+  if (!c) return [];
+  const map = [
+    ["family", "family", (x) => ({ did: x.text, feel: x.good, improve: x.improve })],
+    ["work", "work", (x) => ({ did: x.text, improve: x.improve, good: x.good })],
+    ["self", "daily", (x) => ({ did: x.text, feel: x.good, improve: x.improve })],
+  ];
+  return map
+    .filter(([k]) => c[k] && (c[k].text || c[k].good || c[k].improve || c[k].score || (c[k].tags || []).length))
+    .map(([k, type, f]) => {
+      const fields = Object.fromEntries(Object.entries(f(c[k])).filter(([, v]) => v));
+      return { id: newId(), type, score: c[k].score || null, fields, tags: c[k].tags || [] };
+    });
+}
+const normalizeForm = (f) => {
+  if (!f) return emptyForm();
+  const entries = Array.isArray(f.entries) ? f.entries : legacyToEntries(f.cats);
+  return { ...emptyForm(), ...f, entries };
+};
 
 export default function DailyReview() {
   const [view, setView] = useState("record");
@@ -125,7 +175,7 @@ const clearDraft = (d) => {
   } catch (e) {}
 };
 
-const pickCat = (c, k) => ({
+const _unusedPickCat = (c, k) => ({
   text: (c && c[k] && c[k].text) || "",
   good: (c && c[k] && c[k].good) || "",
   improve: (c && c[k] && c[k].improve) || "",
@@ -158,11 +208,11 @@ function RecordView() {
       let serverForm = emptyForm();
       setScoreInfo(row ? { exists: true, score: row.write_score, at: row.first_saved_at } : { exists: false, score: null, at: null });
       setPrevPlan(prev && prev.plan ? { date: prev.date, plan: prev.plan, done: prev.plan_done } : null);
-      if (row && row.categories) {
-        const c = row.categories;
+      if (row) {
+        const entries = Array.isArray(row.entries) && row.entries.length ? row.entries : legacyToEntries(row.categories);
         serverForm = {
           mood: row.mood || "🙂",
-          cats: { family: pickCat(c, "family"), work: pickCat(c, "work"), self: pickCat(c, "self") },
+          entries,
           reflection: row.reflection || {},
           routines: row.routines || {},
           advice: row.advice || "",
@@ -170,7 +220,8 @@ function RecordView() {
         };
       }
       loadedRef.current = JSON.stringify(serverForm);
-      const draft = readDraft(d);
+      const rawDraft = readDraft(d);
+      const draft = rawDraft ? normalizeForm(rawDraft) : null;
       if (draft && JSON.stringify(draft) !== loadedRef.current) {
         setForm(draft);
         setToast("저장 안 된 내용을 불러왔어요");
@@ -209,17 +260,55 @@ function RecordView() {
     if (JSON.stringify(form) !== loadedRef.current) writeDraft(date, form);
   }, [form, date, loading]);
 
-  const setCat = (key, patch) => {
-    if (patch.score) setMissing((m) => m.filter((k) => k !== key));
-    setForm((f) => ({ ...f, cats: { ...f.cats, [key]: { ...f.cats[key], ...patch } } }));
+  const updateEntry = (id, patch) => {
+    if (patch.score) setMissing((m) => m.filter((k) => k !== id));
+    setForm((f) => ({
+      ...f,
+      entries: f.entries.map((e) =>
+        e.id === id ? { ...e, ...patch, fields: patch.fields ? { ...e.fields, ...patch.fields } : e.fields } : e
+      ),
+    }));
+  };
+  const toggleEntryTag = (id, tag) =>
+    setForm((f) => ({
+      ...f,
+      entries: f.entries.map((e) =>
+        e.id === id ? { ...e, tags: e.tags.includes(tag) ? e.tags.filter((t) => t !== tag) : [...e.tags, tag] } : e
+      ),
+    }));
+  const addEntry = (type) => setForm((f) => ({ ...f, entries: [...f.entries, newEntry(type)] }));
+  const removeEntry = (id) => {
+    const e = form.entries.find((x) => x.id === id);
+    const hasContent = e && (e.score || e.tags.length || Object.values(e.fields).some((v) => v && v.replace(/[•\s]/g, "")));
+    if (hasContent && !window.confirm(`${TYPES[e.type] ? TYPES[e.type].label : "이"} 카드를 지울까요? 적은 내용도 함께 지워져요.`)) return;
+    setForm((f) => ({ ...f, entries: f.entries.filter((x) => x.id !== id) }));
   };
 
-  const toggleTag = (key, tag) =>
-    setForm((f) => {
-      const tags = f.cats[key].tags;
-      const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
-      return { ...f, cats: { ...f.cats, [key]: { ...f.cats[key], tags: next } } };
+  // 항목별 태그 목록 (자유롭게 추가·삭제, 서버에 저장)
+  const [tagPresets, setTagPresets] = useState(() => Object.fromEntries(TYPE_ORDER.map((t) => [t, TYPES[t].tags])));
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/backup?key=${encodeURIComponent(TAGS_KEY)}`);
+        const row = await res.json();
+        if (row && row.data) {
+          const saved = JSON.parse(row.data);
+          if (saved && typeof saved === "object") setTagPresets((p) => ({ ...p, ...saved }));
+        }
+      } catch (e) {}
+    })();
+  }, []);
+  const saveTagPresets = (type, list) => {
+    setTagPresets((p) => {
+      const next = { ...p, [type]: list };
+      fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: TAGS_KEY, value: JSON.stringify(next) }),
+      }).catch(() => {});
+      return next;
     });
+  };
 
   const [missing, setMissing] = useState([]); // 만족도를 안 고른 영역
   const [about, setAbout] = useState(DEFAULT_ABOUT); // 조언에 항상 반영할 "나에 대해"
@@ -286,11 +375,11 @@ function RecordView() {
   };
 
   const checkScores = () => {
-    const miss = AREAS.filter((a) => !form.cats[a.key].score).map((a) => a.key);
-    setMissing(miss);
-    if (miss.length) {
-      const names = AREAS.filter((a) => miss.includes(a.key)).map((a) => a.label).join(", ");
-      window.alert(`${names}의 만족도(1~5)를 골라야 저장할 수 있어요.`);
+    const missEntries = form.entries.filter((e) => TYPES[e.type] && TYPES[e.type].score && !e.score);
+    setMissing(missEntries.map((e) => e.id));
+    if (missEntries.length) {
+      const names = [...new Set(missEntries.map((e) => TYPES[e.type].label))].join(", ");
+      window.alert(`${names}의 점수(1~5)를 골라야 저장할 수 있어요.`);
       return false;
     }
     return true;
@@ -301,17 +390,17 @@ function RecordView() {
     setSaving(true);
     try {
       const clean = (t) => (t && t.replace(/[•\s]/g, "") ? t.replace(/\n?•\s*$/, "").trim() : "");
-      const categories = {};
-      Object.entries(form.cats).forEach(([k, c]) => {
-        categories[k] = { ...c, text: clean(c.text), good: clean(c.good), improve: clean(c.improve) };
-      });
+      const entries = form.entries.map((e) => ({
+        ...e,
+        fields: Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, clean(v)]).filter(([, v]) => v)),
+      }));
       const res = await fetch("/api/daily-records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date,
           mood: form.mood,
-          categories,
+          entries,
           reflection: form.reflection,
           routines: Object.fromEntries(checklist.map((c) => [c, Boolean(form.routines[c])])),
           advice: (form.advice || "").trim(),
@@ -394,7 +483,17 @@ function RecordView() {
             <ChevronLeft size={18} color="#5B6470" />
           </button>
           <div style={styles.dateWrap}>
-            <div style={styles.dateBig}>{fmtFull(date)}</div>
+            <label style={styles.dateBig}>
+              {fmtFull(date)} <ChevronDown size={15} color="#9AA3AF" style={{ verticalAlign: "middle" }} />
+              <input
+                type="date"
+                value={date}
+                max={todayISO()}
+                onChange={(e) => e.target.value && setDate(e.target.value)}
+                style={styles.dateInput}
+                aria-label="날짜 선택"
+              />
+            </label>
             {!isToday && (
               <button style={styles.todayBtn} onClick={() => setDate(todayISO())}>
                 오늘로
@@ -439,13 +538,30 @@ function RecordView() {
               </div>
             )}
 
-            {AREAS.map((a) => (
-              <AreaCard key={a.key} area={a} value={form.cats[a.key]} missing={missing.includes(a.key)} onChange={(patch) => setCat(a.key, patch)} />
+            {form.entries.map((e) => (
+              <EntryCard
+                key={e.id}
+                entry={e}
+                missing={missing.includes(e.id)}
+                presets={tagPresets[e.type] || []}
+                onChange={(patch) => updateEntry(e.id, patch)}
+                onToggleTag={(t) => toggleEntryTag(e.id, t)}
+                onSavePresets={(list) => saveTagPresets(e.type, list)}
+                onRemove={() => removeEntry(e.id)}
+              />
             ))}
+
+            <div style={styles.addTypeRow}>
+              {TYPE_ORDER.map((t) => (
+                <button key={t} style={styles.addTypeBtn} onClick={() => addEntry(t)}>
+                  <Plus size={13} style={{ marginRight: 2 }} />
+                  {TYPES[t].emoji} {TYPES[t].label}
+                </button>
+              ))}
+            </div>
 
             <Checklist items={checklist} checked={form.routines} onToggle={toggleCheck} onSaveList={saveChecklist} />
 
-            <TagPicker cats={form.cats} onToggle={toggleTag} />
 
             <button style={styles.saveBtn} onClick={save} disabled={saving}>
               {savedFlash ? (
@@ -690,49 +806,6 @@ function AutoTextarea({ value, onChange, placeholder, minRows = 1, style, bullet
 }
 
 // ---------------------------------------------------------------------------
-function AreaCard({ area, value, onChange, missing }) {
-  return (
-    <div style={{ ...styles.section, ...(missing ? styles.sectionMissing : {}) }}>
-      <div style={styles.sectionHead}>
-        <div style={styles.cardTitle}>{area.label}</div>
-        <div style={styles.scoreRow} aria-label={`${area.label} 만족도`}>
-          <span style={{ ...styles.scoreLabel, ...(missing ? { color: "#DC5B45" } : {}) }}>{missing ? "만족도 선택!" : "만족도"}</span>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              onClick={() => onChange({ score: value.score === n ? null : n })}
-              style={{ ...styles.scoreBtn, ...(value.score === n ? styles.scoreBtnOn : {}) }}
-              aria-label={`${n}점`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      </div>
-      <AutoTextarea value={value.text} onChange={(v) => onChange({ text: v })} placeholder={area.hint} minRows={area.simple ? 1 : 2} />
-      {!area.simple && (
-        <>
-          <div style={styles.lineRow}>
-            <span style={{ ...styles.lineBadge, ...styles.goodBadge }}>잘한 점</span>
-            <AutoTextarea value={value.good} onChange={(v) => onChange({ good: v })} placeholder="잘 해낸 것" style={styles.lineInput} />
-          </div>
-          <div style={styles.lineRow}>
-            <span style={{ ...styles.lineBadge, ...styles.improveBadge }}>보완할 점</span>
-            <AutoTextarea value={value.improve} onChange={(v) => onChange({ improve: v })} placeholder="다음엔 이렇게" style={styles.lineInput} />
-          </div>
-        </>
-      )}
-      {value.tags.length > 0 && (
-        <div style={styles.chipWrap}>
-          {value.tags.map((t) => (
-            <span key={t} style={styles.tagMini}>#{t}</span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // 체크리스트: 나에게 도움이 되는 작은 행동들. 탭 한 번으로 체크
 function Checklist({ items, checked, onToggle, onSaveList }) {
   const [edit, setEdit] = useState(false);
@@ -791,49 +864,113 @@ function Checklist({ items, checked, onToggle, onSaveList }) {
   );
 }
 
-// 태그: 버튼 하나. 누르면 가족/업무/나 태그가 한 번에 펼쳐지고, 탭하면 바로 선택
-function TagPicker({ cats, onToggle }) {
-  const [open, setOpen] = useState(false);
-  const count = AREAS.reduce((n, a) => n + cats[a.key].tags.length, 0);
-
-  const addCustom = (key, label) => {
-    const v = (window.prompt(`${label} 태그 추가`) || "").trim().replace(/^#/, "");
-    if (v && !cats[key].tags.includes(v)) onToggle(key, v);
+// 항목 카드: 종류별 프리셋 칸 + 점수 + 태그(카드 안에서 바로 선택·추가·삭제)
+function EntryCard({ entry, missing, presets, onChange, onToggleTag, onSavePresets, onRemove }) {
+  const t = TYPES[entry.type] || { label: entry.type, emoji: "📝", score: false, fields: [{ k: "did", label: "내용" }] };
+  const [tagOpen, setTagOpen] = useState(false);
+  const [tagEdit, setTagEdit] = useState(false);
+  const [draft, setDraft] = useState("");
+  const all = [...presets, ...entry.tags.filter((x) => !presets.includes(x))];
+  const addTag = () => {
+    const v = draft.trim().replace(/^#/, "");
+    if (!v) return;
+    if (!presets.includes(v)) onSavePresets([...presets, v]);
+    if (!entry.tags.includes(v)) onToggleTag(v);
+    setDraft("");
   };
 
   return (
-    <div style={styles.section}>
-      <button style={styles.tagMainBtn} onClick={() => setOpen((o) => !o)}>
-        <Hash size={15} style={{ marginRight: 6 }} />
-        태그 {count > 0 ? `${count}개 선택됨` : "달기"}
-        <ChevronDown size={16} style={{ marginLeft: "auto", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
-      </button>
-      {open && (
-        <div style={{ marginTop: 6 }}>
-          {AREAS.map((a) => {
-            const selected = cats[a.key].tags;
-            const all = [...SUGGESTED_TAGS[a.key], ...selected.filter((t) => !SUGGESTED_TAGS[a.key].includes(t))];
-            return (
-              <div key={a.key} style={styles.tagGroup}>
-                <div style={styles.tagGroupLabel}>{a.label}</div>
-                <div style={styles.chipWrap}>
-                  {all.map((t) => (
-                    <button key={t} onClick={() => onToggle(a.key, t)} style={{ ...styles.tagChip, ...(selected.includes(t) ? styles.tagChipOn : {}) }}>
-                      #{t}
-                    </button>
-                  ))}
-                  <button style={styles.tagAdd} onClick={() => addCustom(a.key, a.label)}>
-                    <Plus size={12} style={{ marginRight: 2 }} />
-                    직접
+    <div style={{ ...styles.section, ...(missing ? styles.sectionMissing : {}) }}>
+      <div style={styles.sectionHead}>
+        <div style={styles.cardTitle}>
+          {t.emoji} {t.label}
+        </div>
+        <button style={styles.removeBtn} onClick={onRemove} aria-label={`${t.label} 카드 삭제`}>
+          <X size={15} color="#9AA3AF" />
+        </button>
+      </div>
+
+      {t.score && (
+        <div style={styles.scoreLine}>
+          <span style={{ ...styles.scoreLabel, ...(missing ? { color: "#DC5B45" } : {}) }}>{missing ? "점수 선택!" : "점수"}</span>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              onClick={() => onChange({ score: entry.score === n ? null : n })}
+              style={{ ...styles.scoreBtn, ...(entry.score === n ? styles.scoreBtnOn : {}) }}
+              aria-label={`${n}점`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {t.fields.map((f) => (
+        <div key={f.k} style={styles.fieldBlock}>
+          <div style={styles.fieldLabel}>{f.label}</div>
+          <AutoTextarea
+            value={entry.fields[f.k] || ""}
+            onChange={(v) => onChange({ fields: { [f.k]: v } })}
+            placeholder={f.ph}
+            bullet={!f.single}
+          />
+        </div>
+      ))}
+
+      <div style={styles.tagBar}>
+        {!tagOpen && entry.tags.map((x) => <span key={x} style={styles.tagMini}>#{x}</span>)}
+        <button style={styles.tagToggle} onClick={() => { setTagOpen((o) => !o); setTagEdit(false); }}>
+          <Hash size={12} style={{ marginRight: 2 }} />
+          {tagOpen ? "닫기" : entry.tags.length ? "태그" : "태그 달기"}
+        </button>
+      </div>
+      {tagOpen && (
+        <div style={styles.tagPanel}>
+          <div style={styles.chipWrap}>
+            {all.map((x) =>
+              tagEdit ? (
+                <span key={x} style={styles.chipEditing}>
+                  #{x}
+                  <button
+                    style={styles.chipRemove}
+                    onClick={() => {
+                      onSavePresets(presets.filter((p) => p !== x));
+                      if (entry.tags.includes(x)) onToggleTag(x);
+                    }}
+                    aria-label={`${x} 태그 삭제`}
+                  >
+                    <X size={11} color="#DC5B45" />
                   </button>
-                </div>
-              </div>
-            );
-          })}
-          <button style={styles.tagDoneBtn} onClick={() => setOpen(false)}>
-            <Check size={14} style={{ marginRight: 4 }} />
-            완료
-          </button>
+                </span>
+              ) : (
+                <button key={x} onClick={() => onToggleTag(x)} style={{ ...styles.tagChip, ...(entry.tags.includes(x) ? styles.tagChipOn : {}) }}>
+                  #{x}
+                </button>
+              )
+            )}
+          </div>
+          <div style={styles.addRow}>
+            <input
+              style={styles.addInput}
+              placeholder="새 태그"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addTag()}
+            />
+            <button style={styles.addBtn} onClick={addTag} aria-label="태그 추가">
+              <Plus size={15} color="#fff" />
+            </button>
+          </div>
+          <div style={styles.tagPanelFoot}>
+            <button style={styles.linkBtn} onClick={() => setTagEdit((v) => !v)}>
+              {tagEdit ? "삭제 끝내기" : "태그 목록에서 지우기"}
+            </button>
+            <button style={styles.tagDoneSmall} onClick={() => setTagOpen(false)}>
+              <Check size={13} style={{ marginRight: 3 }} />
+              완료
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -861,15 +998,15 @@ function buildPrompt(date, form, history, about, checklist = []) {
   lines.push(`[파워로그] ${fmtFull(date)} 하루 기록이에요. 아래 기록을 보고 조언해주세요.`);
   lines.push("");
   lines.push(`기분: ${form.mood} (${moodLabel(form.mood)})`);
-  AREAS.forEach((a) => {
-    const c = form.cats[a.key];
-    if (!(c.text || c.good || c.improve || c.tags.length || c.score)) return;
+  form.entries.forEach((e) => {
+    const t = TYPES[e.type];
+    if (!t) return;
+    const filled = t.fields.filter((f) => e.fields[f.k]);
+    if (!filled.length && !e.score && !e.tags.length) return;
     lines.push("");
-    lines.push(`■ ${a.label}${c.score ? ` (만족도 ${c.score}/5)` : ""}`);
-    if (c.text) lines.push(`있었던 일:\n${c.text}`);
-    if (c.good) lines.push(`잘한 점:\n${c.good}`);
-    if (c.improve) lines.push(`보완할 점:\n${c.improve}`);
-    if (c.tags.length) lines.push(`태그: ${c.tags.map((t) => "#" + t).join(" ")}`);
+    lines.push(`■ ${t.label}${e.score ? ` (점수 ${e.score}/5)` : ""}`);
+    filled.forEach((f) => lines.push(`${f.label}:${f.single ? " " : "\n"}${e.fields[f.k]}`));
+    if (e.tags.length) lines.push(`태그: ${e.tags.map((x) => "#" + x).join(" ")}`);
   });
   if (checklist.length) {
     lines.push("");
@@ -880,10 +1017,8 @@ function buildPrompt(date, form, history, about, checklist = []) {
     lines.push("");
     lines.push("(참고: 최근 흐름)");
     recent.forEach((r) => {
-      const imp = ["family", "work", "self"]
-        .map((k) => r.categories && r.categories[k] && r.categories[k].improve)
-        .filter(Boolean)
-        .map((t) => clip(t, 40));
+      const es = Array.isArray(r.entries) && r.entries.length ? r.entries : legacyToEntries(r.categories);
+      const imp = es.map((e) => e.fields && e.fields.improve).filter(Boolean).map((t) => clip(t, 40));
       const planInfo = r.plan ? ` | 다짐: ${clip(r.plan, 30)}${r.plan_done === true ? " (실행)" : r.plan_done === false ? " (못함)" : ""}` : "";
       lines.push(`- ${fmtFull(r.date)} 기분 ${r.mood || "-"}${imp.length ? ` | 보완할 점: ${imp.join(", ")}` : ""}${planInfo}`);
     });
@@ -901,7 +1036,7 @@ function buildPrompt(date, form, history, about, checklist = []) {
   lines.push("(한 문단, 6~8문장) 업무의 달인 관점에서 업무 기록을 상세히 분석해주세요. 잘한 점은 구체적으로 칭찬하고, 일하는 방식·우선순위·보완할 점의 원인과 개선법을 실전적으로 말해주세요.");
   lines.push("");
   lines.push("🧠 마음");
-  lines.push("(한 문단, 6~8문장) 정신건강의학 전문가의 관점에서 오늘의 감정·불안·스트레스·에너지 상태를 상세히 분석해주세요. 가족·업무·나 만족도와 기분의 관계, 체크리스트(수면·심호흡 등), 최근 흐름의 패턴을 근거로 삼고, 잘 버틴 부분은 인정해주세요.");
+  lines.push("(한 문단, 6~8문장) 정신건강의학 전문가의 관점에서 오늘의 감정·불안·스트레스·에너지 상태를 상세히 분석해주세요. 가족·업무·일상 점수와 기분의 관계, 체크리스트(수면·심호흡 등), 최근 흐름의 패턴을 근거로 삼고, 잘 버틴 부분은 인정해주세요.");
   lines.push("");
   lines.push("🎯 내일 딱 한 가지: (두 분석을 종합한 결론, 내일 바로 실천할 작은 행동 한 문장)");
   lines.push("");
@@ -954,9 +1089,9 @@ function Lines({ text }) {
 function OnePage({ date, form, checklist = [], onClose }) {
   const ref = useRef(null);
   const [busy, setBusy] = useState(false);
-  const areas = AREAS.filter((a) => {
-    const c = form.cats[a.key];
-    return c.text || c.good || c.improve || c.tags.length || c.score;
+  const entries = form.entries.filter((e) => {
+    const t = TYPES[e.type];
+    return t && (e.score || e.tags.length || t.fields.some((f) => e.fields[f.k]));
   });
   const advice = cleanAdvice(form.advice);
   const adviceHead = /^(👏|🧠|💼|✍️|✍|🎯)/;
@@ -1010,33 +1145,34 @@ function OnePage({ date, form, checklist = [], onClose }) {
               {form.mood} <span style={page.moodText}>{moodLabel(form.mood)}</span>
             </div>
           </div>
-          {areas.length === 0 && <div style={page.empty}>아직 작성한 내용이 없어요.</div>}
-          {areas.map((a) => {
-            const c = form.cats[a.key];
+          {entries.length === 0 && <div style={page.empty}>아직 작성한 내용이 없어요.</div>}
+          {entries.map((e) => {
+            const t = TYPES[e.type];
             return (
-              <div key={a.key} style={page.block}>
+              <div key={e.id} style={page.block}>
                 <div style={page.blockHead}>
-                  <span style={page.blockTitle}>{a.label}</span>
-                  {c.score && <span style={page.score}>{"●".repeat(c.score)}{"○".repeat(5 - c.score)}</span>}
+                  <span style={page.blockTitle}>
+                    {t.emoji} {t.label}
+                  </span>
+                  {e.score && <span style={page.score}>{"●".repeat(e.score)}{"○".repeat(5 - e.score)}</span>}
                 </div>
-                {c.text && <Lines text={c.text} />}
-                {c.good && (
-                  <div style={page.sub}>
-                    <span style={{ ...page.badge, ...page.goodBadge }}>잘한 점</span>
-                    <div style={{ flex: 1 }}>
-                      <Lines text={c.good} />
-                    </div>
-                  </div>
-                )}
-                {c.improve && (
-                  <div style={page.sub}>
-                    <span style={{ ...page.badge, ...page.improveBadge }}>보완할 점</span>
-                    <div style={{ flex: 1 }}>
-                      <Lines text={c.improve} />
-                    </div>
-                  </div>
-                )}
-                {c.tags.length > 0 && <div style={page.tags}>{c.tags.map((t) => "#" + t).join("  ")}</div>}
+                {t.fields
+                  .filter((f) => e.fields[f.k])
+                  .map((f) =>
+                    f.single ? (
+                      <div key={f.k} style={page.line}>
+                        <b style={page.fieldName}>{f.label}</b> {e.fields[f.k]}
+                      </div>
+                    ) : (
+                      <div key={f.k} style={page.sub}>
+                        <span style={{ ...page.badge, ...(f.k === "improve" ? page.improveBadge : f.k === "feel" ? page.goodBadge : page.plainBadge) }}>{f.label}</span>
+                        <div style={{ flex: 1 }}>
+                          <Lines text={e.fields[f.k]} />
+                        </div>
+                      </div>
+                    )
+                  )}
+                {e.tags.length > 0 && <div style={page.tags}>{e.tags.map((x) => "#" + x).join("  ")}</div>}
               </div>
             );
           })}
@@ -1105,6 +1241,8 @@ const page = {
   badge: { flexShrink: 0, fontSize: 11, fontWeight: 800, padding: "3px 7px", borderRadius: 6, marginTop: 2 },
   goodBadge: { background: "#EEF0FF", color: "#4F46E5" },
   improveBadge: { background: "#FDF3DC", color: "#B06A00" },
+  plainBadge: { background: "#F0F2F4", color: "#5B6470" },
+  fieldName: { fontSize: 12, color: "#5B6470", marginRight: 4 },
   tags: { fontSize: 12, color: "#4F46E5", fontWeight: 600, marginTop: 8 },
   checkWrap: { display: "flex", flexWrap: "wrap", gap: 6 },
   checkItem: { fontSize: 12.5, color: "#9AA3AF", border: "1px solid #EEF1F3", borderRadius: 14, padding: "3px 9px" },
@@ -1132,7 +1270,7 @@ export const styles = {
   dateNavRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   navBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   dateWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
-  dateBig: { fontSize: 18, fontWeight: 700, color: "#1F2937" },
+  dateBig: { position: "relative", fontSize: 18, fontWeight: 700, color: "#1F2937" },
   todayBtn: { background: "#EEF0FF", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, color: "#4F46E5" },
   moodRow: { display: "flex", justifyContent: "center", gap: 8, marginTop: 14 },
   moodCol: { background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: 0 },
@@ -1161,6 +1299,19 @@ export const styles = {
   sectionMissing: { boxShadow: "0 0 0 1.5px #F2B8AE inset, 0 1px 3px rgba(15,23,42,0.06)" },
   sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   cardTitle: { fontSize: 15, fontWeight: 800, color: "#1F2937" },
+  dateInput: { position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", border: "none" },
+  addTypeRow: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 },
+  addTypeBtn: { display: "inline-flex", alignItems: "center", border: "1px dashed #C7CCFF", background: "#fff", color: "#4F46E5", fontSize: 13, fontWeight: 700, padding: "8px 11px", borderRadius: 20 },
+  removeBtn: { background: "none", border: "none", padding: 4, display: "flex" },
+  scoreLine: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 },
+  fieldBlock: { marginTop: 6 },
+  fieldLabel: { fontSize: 12, fontWeight: 800, color: "#5B6470", marginBottom: 4 },
+  tagBar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 8 },
+  tagToggle: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "5px 10px", fontSize: 12, fontWeight: 700, color: "#5B6470", marginLeft: "auto" },
+  tagPanel: { marginTop: 8, paddingTop: 6, borderTop: "1px dashed #E5E9EC" },
+  tagPanelFoot: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
+  linkBtn: { border: "none", background: "none", color: "#9AA3AF", fontSize: 12, fontWeight: 700, textDecoration: "underline", padding: 0 },
+  tagDoneSmall: { display: "inline-flex", alignItems: "center", border: "none", background: "#4F46E5", color: "#fff", fontSize: 12.5, fontWeight: 700, padding: "7px 12px", borderRadius: 10 },
   scoreRow: { display: "flex", alignItems: "center", gap: 4 },
   scoreLabel: { fontSize: 11, color: "#9AA3AF", fontWeight: 700, marginRight: 2 },
   scoreBtn: { width: 26, height: 26, borderRadius: "50%", border: "1px solid #E5E9EC", background: "#fff", color: "#9AA3AF", fontSize: 12, fontWeight: 700, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" },

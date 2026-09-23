@@ -19,8 +19,8 @@ const fmtFull = (iso) => {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
 };
 
-const AREA_LABEL = { family: "가족", work: "업무", self: "나" };
-const AREA_ORDER = ["family", "work", "self"];
+const AREA_LABEL = { family: "가족", work: "업무", daily: "일상", friend: "친구", self: "일상" };
+const AREA_ORDER = ["family", "work", "daily", "friend"];
 const MOOD_EMOJI = { 5: "😊", 4: "🙂", 3: "😐", 2: "😞", 1: "😣" };
 const moodEmoji = (avg) => (avg == null ? "–" : MOOD_EMOJI[Math.min(5, Math.max(1, Math.round(avg)))]);
 
@@ -95,6 +95,7 @@ export default function Stats() {
           <CheckMood items={data.routineMood || []} />
           <MoodTrend points={data.moodTrend} />
           <Weekday weekday={data.weekday} />
+          <Friends friends={data.friends} />
           <Tags tagsByArea={data.tagsByArea} />
           <TagMood tagMood={data.tagMood} />
           <Reflections items={data.reflections} />
@@ -249,7 +250,7 @@ function AreaScores({ items }) {
   const gaps = valid.filter((i) => i.highMood != null && i.lowMood != null).map((i) => ({ ...i, gap: i.highMood - i.lowMood }));
   const key = gaps.length ? gaps.reduce((a, b) => (b.gap > a.gap ? b : a)) : null;
   return (
-    <Card title="영역별 만족도" sub={key && key.gap > 0 ? `요즘 기분을 가장 좌우하는 건 ${AREA_LABEL[key.area]}이에요` : "영역별 평균 만족도 (5점)"}>
+    <Card title="항목별 점수" sub={key && key.gap > 0 ? `요즘 기분을 가장 좌우하는 건 ${AREA_LABEL[key.area]}이에요` : "항목별 평균 점수 (5점)"}>
       {AREA_ORDER.map((a) => {
         const i = items.find((x) => x.area === a);
         if (!i || !i.days) return null;
@@ -266,7 +267,7 @@ function AreaScores({ items }) {
             </div>
             {(i.highMood != null || i.lowMood != null) && (
               <div style={s.areaMoodNote}>
-                만족도 높은 날 기분 {i.highMood ?? "–"} · 낮은 날 기분 {i.lowMood ?? "–"}
+                점수 높은 날 기분 {i.highMood ?? "–"} · 낮은 날 기분 {i.lowMood ?? "–"}
               </div>
             )}
           </div>
@@ -360,6 +361,38 @@ function CheckMood({ items }) {
   );
 }
 
+function Friends({ friends }) {
+  if (!friends || !friends.meetings) return null;
+  return (
+    <Card title="🤝 친구" sub={`이 기간에 ${friends.meetings}번 만났어요`}>
+      {friends.who.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={s.areaLabel}>자주 만난 사람</div>
+          <div style={s.chipWrap}>
+            {friends.who.map((x) => (
+              <span key={x.name} style={s.tagChip}>
+                {x.name} <b style={{ marginLeft: 3 }}>{x.count}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {friends.where.length > 0 && (
+        <div>
+          <div style={s.areaLabel}>자주 간 곳</div>
+          <div style={s.chipWrap}>
+            {friends.where.map((x) => (
+              <span key={x.name} style={s.tagChip}>
+                {x.name} <b style={{ marginLeft: 3 }}>{x.count}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function Tags({ tagsByArea }) {
   const has = AREA_ORDER.some((a) => (tagsByArea[a] || []).length);
   if (!has) return null;
@@ -412,10 +445,10 @@ function Reflections({ items }) {
   const list = items.filter((r) => r.type === type && (area === "all" || r.area === area));
   if (!items.length) return null;
   return (
-    <Card title="잘한 점 · 보완할 점 모아보기">
+    <Card title="느낀 점 · 보완할 점 모아보기">
       <div style={s.filterRow}>
         {[
-          { k: "good", l: "잘한 점" },
+          { k: "good", l: "느낀 점" },
           { k: "improve", l: "보완할 점" },
         ].map((o) => (
           <button key={o.k} onClick={() => setType(o.k)} style={{ ...s.filterBtn, ...(type === o.k ? (o.k === "good" ? s.filterGoodOn : s.filterImproveOn) : {}) }}>

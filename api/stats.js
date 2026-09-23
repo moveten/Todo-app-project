@@ -9,7 +9,31 @@ function getConnectionString() {
   );
 }
 
-const AREAS = ['family', 'work', 'self'];
+const AREAS = ['family', 'work', 'daily', 'friend'];
+
+// 예전 구조(가족/업무/나 고정 칸)를 새 항목 구조로 변환
+function legacyToEntries(c) {
+  if (!c) return [];
+  const map = [
+    ['family', 'family', (x) => ({ did: x.text, feel: x.good, improve: x.improve })],
+    ['work', 'work', (x) => ({ did: x.text, improve: x.improve, good: x.good })],
+    ['self', 'daily', (x) => ({ did: x.text, feel: x.good, improve: x.improve })],
+  ];
+  return map
+    .filter(([k]) => c[k] && (c[k].text || c[k].good || c[k].improve || c[k].score || (c[k].tags || []).length))
+    .map(([k, type, f]) => ({
+      type,
+      score: c[k].score || null,
+      fields: Object.fromEntries(Object.entries(f(c[k])).filter(([, v]) => v)),
+      tags: c[k].tags || [],
+    }));
+}
+const splitNames = (t) =>
+  String(t || '')
+    .replace(/•/g, ',')
+    .split(/[,，、\n]|\s와\s|\s랑\s|\s과\s/)
+    .map((x) => x.trim())
+    .filter(Boolean);
 const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 const round1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
 
@@ -21,10 +45,22 @@ export default async function handler(req, res) {
   try {
     const from = (req.query && req.query.from) || null; // YYYY-MM-DD, 없으면 전체
     const rows = from
-      ? await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done, write_score
+      ? await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, routines, plan, plan_done, write_score
                   FROM daily_records WHERE date >= ${from} ORDER BY date`
-      : await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, routines, plan, plan_done, write_score
+      : await sql`SELECT to_char(date, 'YYYY-MM-DD') AS date, mood, mood_score, categories, entries, routines, plan, plan_done, write_score
                   FROM daily_records ORDER BY date`;
+
+    // 날짜별로 항목을 종류별로 묶음 (같은 종류 카드가 여러 개면 점수는 평균, 태그는 합침)
+    rows.forEach((r) => {
+      r._entries = Array.isArray(r.entries) && r.entries.length ? r.entries : legacyToEntries(r.categories);
+      r._t = {};
+      AREAS.forEach((t) => {
+        const es = r._entries.filter((e) => e.type === t);
+        if (!es.length) return;
+        const sc = es.map((e) => e.score).filter(Boolean);
+        r._t[t] = { score: sc.length ? Math.round(avg(sc)) : null, tags: [...new Set(es.flatMap((e) => e.tags || []))] };
+      });
+    });
 
     const scored = rows.filter((r) => r.mood_score != null);
 
@@ -67,7 +103,7 @@ export default async function handler(req, res) {
     AREAS.forEach((area) => {
       const counts = {};
       rows.forEach((r) => {
-        const tags = (r.categories && r.categories[area] && r.categories[area].tags) || [];
+        const tags = (r._t[area] && r._t[area].tags) || [];
         tags.forEach((t) => {
           counts[t] = (counts[t] || 0) + 1;
           (tagDays[t] = tagDays[t] || new Set()).add(r.date);
@@ -90,10 +126,10 @@ export default async function handler(req, res) {
 
     // 7) 영역별 만족도: 평균 + 만족도 높은 날/낮은 날의 기분 차이 (무엇이 기분을 좌우하나)
     const areaScores = AREAS.map((area) => {
-      const withScore = rows.filter((r) => r.categories && r.categories[area] && r.categories[area].score);
-      const scores = withScore.map((r) => r.categories[area].score);
-      const high = withScore.filter((r) => r.categories[area].score >= 4 && r.mood_score != null).map((r) => r.mood_score);
-      const low = withScore.filter((r) => r.categories[area].score <= 2 && r.mood_score != null).map((r) => r.mood_score);
+      const withScore = rows.filter((r) => r._t[area] && r._t[area].score);
+      const scores = withScore.map((r) => r._t[area].score);
+      const high = withScore.filter((r) => r._t[area].score >= 4 && r.mood_score != null).map((r) => r.mood_score);
+      const low = withScore.filter((r) => r._t[area].score <= 2 && r.mood_score != null).map((r) => r.mood_score);
       return { area, avg: round1(avg(scores)), days: scores.length, highMood: round1(avg(high)), lowMood: round1(avg(low)), highDays: high.length, lowDays: low.length };
     });
 
@@ -155,14 +191,33 @@ export default async function handler(req, res) {
     // 6) 잘한 점 / 보완할 점 모아보기 (최신순)
     const reflections = [];
     [...rows].reverse().forEach((r) => {
-      AREAS.forEach((area) => {
-        const c = (r.categories && r.categories[area]) || {};
-        if (c.good) reflections.push({ date: r.date, area, type: 'good', text: c.good });
-        if (c.improve) reflections.push({ date: r.date, area, type: 'improve', text: c.improve });
+      r._entries.forEach((e) => {
+        const f = e.fields || {};
+        const good = f.feel || f.good;
+        if (good) reflections.push({ date: r.date, area: e.type, type: 'good', text: good });
+        if (f.improve) reflections.push({ date: r.date, area: e.type, type: 'improve', text: f.improve });
       });
     });
 
+    // 10) 친구: 자주 만난 사람, 자주 간 곳
+    const who = {};
+    const where = {};
+    let meetings = 0;
+    rows.forEach((r) =>
+      r._entries
+        .filter((e) => e.type === 'friend')
+        .forEach((e) => {
+          meetings++;
+          splitNames(e.fields && e.fields.who).forEach((n) => (who[n] = (who[n] || 0) + 1));
+          const w = ((e.fields && e.fields.where) || '').trim();
+          if (w) where[w] = (where[w] || 0) + 1;
+        })
+    );
+    const top = (o) => Object.entries(o).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 8);
+    const friends = { meetings, who: top(who), where: top(where) };
+
     return res.status(200).json({
+      friends,
       summary: { days: rows.length, avgMood: round1(avg(scored.map((r) => r.mood_score))) },
       moodTrend,
       weekday,
