@@ -741,14 +741,20 @@ function buildPrompt(date, form, history, about, checklist = []) {
     lines.push("→ 내 성향을 이해하고, 위 원칙 중 오늘 기록과 맞닿는 것을 1~2개 골라 자연스럽게 연결해주세요. 매번 전부 나열하지는 말아주세요. 불안하거나 주눅든 부분이 보이면 다그치지 말고, 작게 시작할 수 있는 방향으로 말해주세요.");
   }
   lines.push("");
-  lines.push("위 기록을 바탕으로 조언을 한 문단으로 써주세요. 형식은 이렇게 해주세요.");
-  lines.push("1) 한 문단(8~10문장) 안에 아래 내용을 자연스럽게 이어서 담아주세요.");
-  lines.push("- 먼저 오늘 잘한 점을 구체적으로 짚어 칭찬");
-  lines.push("- 정신건강의학 전문가의 관점에서 오늘의 감정·스트레스·에너지 상태를 상세히 분석 (가족·업무·나 만족도와 기분의 관계, 최근 흐름에서 보이는 패턴 포함)");
-  lines.push("- 업무의 달인 관점에서 업무 기록을 상세히 분석 (일하는 방식, 우선순위, 보완할 점의 원인과 개선법)");
-  lines.push("- 두 분석을 종합해서 지금 가장 중요한 것이 무엇인지 정리");
-  lines.push("2) 문단 다음 줄에, 종합 결론으로 딱 한 줄만 이렇게 써주세요: 🎯 내일 딱 한 가지: (내일 바로 실천할 작은 행동 한 문장)");
-  lines.push("마크다운 기호(**, #, 목록, 표)는 쓰지 말아주세요. 진단은 하지 말고, 기록에 많이 힘든 내용이 있으면 해결책보다 공감을 먼저 하고 믿을 만한 사람이나 전문가와 이야기해보길 권해주세요.");
+  lines.push("위 기록을 바탕으로 아래 형식 그대로 답해주세요. 마크다운 기호(**, #, 목록, 표)는 쓰지 말아주세요.");
+  lines.push("");
+  lines.push("💼 업무");
+  lines.push("(한 문단, 6~8문장) 업무의 달인 관점에서 업무 기록을 상세히 분석해주세요. 잘한 점은 구체적으로 칭찬하고, 일하는 방식·우선순위·보완할 점의 원인과 개선법을 실전적으로 말해주세요.");
+  lines.push("");
+  lines.push("🧠 마음");
+  lines.push("(한 문단, 6~8문장) 정신건강의학 전문가의 관점에서 오늘의 감정·불안·스트레스·에너지 상태를 상세히 분석해주세요. 가족·업무·나 만족도와 기분의 관계, 체크리스트(수면·심호흡 등), 최근 흐름의 패턴을 근거로 삼고, 잘 버틴 부분은 인정해주세요.");
+  lines.push("");
+  lines.push("🎯 내일 딱 한 가지: (두 분석을 종합한 결론, 내일 바로 실천할 작은 행동 한 문장)");
+  lines.push("");
+  lines.push("📜 오늘의 명언: \"명언\" — 말한 사람, 『출처(책·연설·편지 등 정확한 제목)』");
+  lines.push("명언은 오늘 기록과 어울리는 것으로, 실제로 그 사람이 한 말이고 출처가 확인되는 것만 골라주세요. 흔히 잘못 알려진 명언이나 출처가 불분명한 말은 쓰지 말고, 확실하지 않으면 출처가 분명한 다른 명언을 골라주세요.");
+  lines.push("");
+  lines.push("진단은 하지 말고, 기록에 많이 힘든 내용이 있으면 해결책보다 공감을 먼저 하고 믿을 만한 사람이나 전문가와 이야기해보길 권해주세요.");
   return lines.join("\n");
 }
 
@@ -800,6 +806,7 @@ function OnePage({ date, form, checklist = [], onClose }) {
   });
   const advice = cleanAdvice(form.advice);
   const adviceHead = /^(👏|🧠|💼|✍️|✍|🎯)/;
+  const isQuote = (l) => l.trim().startsWith("📜");
 
   const saveImage = async () => {
     if (!ref.current) return;
@@ -904,7 +911,7 @@ function OnePage({ date, form, checklist = [], onClose }) {
                 .split("\n")
                 .filter((l) => l.trim() && !(form.plan && l.includes("🎯")))
                 .map((l, i) => (
-                  <div key={i} style={adviceHead.test(l.trim()) ? page.adviceHead : page.adviceLine}>
+                  <div key={i} style={isQuote(l) ? page.quote : adviceHead.test(l.trim()) ? page.adviceHead : page.adviceLine}>
                     {l.trim()}
                   </div>
                 ))}
@@ -951,6 +958,7 @@ const page = {
   adviceBox: { marginTop: 16, background: "#F7F7FF", borderRadius: 12, padding: "14px 14px 10px" },
   adviceTitle: { fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 6 },
   adviceHead: { fontSize: 13.5, fontWeight: 800, lineHeight: 1.6, marginTop: 8 },
+  quote: { fontSize: 13.5, lineHeight: 1.6, marginTop: 12, padding: "10px 12px", background: "#fff", borderLeft: "3px solid #4F46E5", borderRadius: 6, fontStyle: "italic" },
   adviceLine: { fontSize: 13.5, lineHeight: 1.6 },
   planBox: { marginTop: 12, border: "1.5px solid #1F2937", borderRadius: 12, padding: "12px 14px" },
   planTitle: { fontSize: 12.5, fontWeight: 800 },
