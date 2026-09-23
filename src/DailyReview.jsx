@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Check, Loader2, Plus, X, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Loader2, Plus, X, Settings2, Hash } from "lucide-react";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -23,9 +23,16 @@ const MOODS = [
   { emoji: "😣", label: "힘듦" },
 ];
 
+// 가족이 맨 앞
+const AREAS = [
+  { key: "family", label: "가족", hint: "오늘 가족과 있었던 일" },
+  { key: "work", label: "업무", hint: "오늘 업무에서 있었던 일" },
+  { key: "self", label: "나", hint: "오늘 나를 위해 한 일, 컨디션" },
+];
+
 const SUGGESTED_TAGS = {
-  work: ["회의", "보고서", "민원", "출장", "교육", "야근"],
   family: ["아이", "배우자", "부모님", "외식", "나들이", "병원"],
+  work: ["회의", "보고서", "민원", "출장", "교육", "야근"],
   self: ["운동", "독서", "휴식", "공부", "취미", "친구"],
 };
 
@@ -33,12 +40,14 @@ const DEFAULT_ROUTINES = ["운동", "독서", "일찍 자기", "물 충분히"];
 const ROUTINES_KEY = "daily-review:routines";
 
 const emptyCat = () => ({ text: "", good: "", improve: "", tags: [] });
-const emptyCats = () => ({ work: emptyCat(), family: emptyCat(), self: emptyCat() });
-const emptyForm = () => ({ mood: "🙂", cats: emptyCats(), good: "", improve: "", routines: {} });
+const emptyCats = () => ({ family: emptyCat(), work: emptyCat(), self: emptyCat() });
+const emptyForm = () => ({ mood: "🙂", cats: emptyCats(), reflection: {}, routines: {} });
+const isFilled = (c) => Boolean(c.text || c.good || c.improve || c.tags.length);
 
 export default function DailyReview() {
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState(emptyForm());
+  const [area, setArea] = useState("family");
   const [routineList, setRoutineList] = useState(DEFAULT_ROUTINES);
   const [editRoutines, setEditRoutines] = useState(false);
   const [newRoutine, setNewRoutine] = useState("");
@@ -47,7 +56,6 @@ export default function DailyReview() {
   const [savedFlash, setSavedFlash] = useState(false);
   const [history, setHistory] = useState([]);
 
-  // 루틴 목록(나만의 체크 항목) 서버에서 불러오기
   useEffect(() => {
     (async () => {
       try {
@@ -57,9 +65,7 @@ export default function DailyReview() {
           const list = JSON.parse(row.data);
           if (Array.isArray(list) && list.length) setRoutineList(list);
         }
-      } catch (e) {
-        // 기본값 유지
-      }
+      } catch (e) {}
     })();
   }, []);
 
@@ -87,9 +93,8 @@ export default function DailyReview() {
         });
         setForm({
           mood: row.mood || "🙂",
-          cats: { work: pick("work"), family: pick("family"), self: pick("self") },
-          good: (row.reflection && row.reflection.good) || "",
-          improve: (row.reflection && row.reflection.improve) || "",
+          cats: { family: pick("family"), work: pick("work"), self: pick("self") },
+          reflection: row.reflection || {}, // 예전 기록의 전체 회고는 지우지 않고 그대로 보존
           routines: row.routines || {},
         });
       } else {
@@ -107,9 +112,7 @@ export default function DailyReview() {
       const res = await fetch("/api/daily-records");
       const rows = await res.json();
       if (Array.isArray(rows)) setHistory(rows.slice(0, 14));
-    } catch (e) {
-      // 무시
-    }
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
@@ -134,7 +137,6 @@ export default function DailyReview() {
   const save = async () => {
     setSaving(true);
     try {
-      // 현재 루틴 목록에 있는 항목만 저장 (체크 안 한 것도 false로 기록 → 달성률 계산 가능)
       const routines = {};
       routineList.forEach((r) => (routines[r] = Boolean(form.routines[r])));
       const res = await fetch("/api/daily-records", {
@@ -144,7 +146,7 @@ export default function DailyReview() {
           date,
           mood: form.mood,
           categories: form.cats,
-          reflection: { good: form.good, improve: form.improve },
+          reflection: form.reflection,
           routines,
         }),
       });
@@ -159,6 +161,7 @@ export default function DailyReview() {
   };
 
   const isToday = date === todayISO();
+  const current = AREAS.find((a) => a.key === area);
 
   return (
     <div style={styles.app}>
@@ -185,17 +188,9 @@ export default function DailyReview() {
         </div>
         <div style={styles.moodRow}>
           {MOODS.map((m) => (
-            <button
-              key={m.emoji}
-              onClick={() => setForm((f) => ({ ...f, mood: m.emoji }))}
-              style={styles.moodCol}
-            >
-              <span style={{ ...styles.moodBtn, ...(form.mood === m.emoji ? styles.moodBtnActive : {}) }}>
-                {m.emoji}
-              </span>
-              <span style={{ ...styles.moodLabel, ...(form.mood === m.emoji ? { color: "#4F46E5" } : {}) }}>
-                {m.label}
-              </span>
+            <button key={m.emoji} onClick={() => setForm((f) => ({ ...f, mood: m.emoji }))} style={styles.moodCol}>
+              <span style={{ ...styles.moodBtn, ...(form.mood === m.emoji ? styles.moodBtnActive : {}) }}>{m.emoji}</span>
+              <span style={{ ...styles.moodLabel, ...(form.mood === m.emoji ? { color: "#4F46E5" } : {}) }}>{m.label}</span>
             </button>
           ))}
         </div>
@@ -208,35 +203,30 @@ export default function DailyReview() {
           </div>
         ) : (
           <>
-            <CategorySection
-              label="가족"
-              placeholder="오늘 가족과 있었던 일"
-              value={form.cats.family}
-              suggestions={SUGGESTED_TAGS.family}
-              onText={(v) => setCat("family", { text: v })}
-              onToggleTag={(t) => toggleTag("family", t)}
-            />
-            <CategorySection
-              label="업무"
-              placeholder="오늘 업무에서 있었던 일"
-              reflect
-              onGood={(v) => setCat("work", { good: v })}
-              onImprove={(v) => setCat("work", { improve: v })}
-              value={form.cats.work}
-              suggestions={SUGGESTED_TAGS.work}
-              onText={(v) => setCat("work", { text: v })}
-              onToggleTag={(t) => toggleTag("work", t)}
-            />
-            <CategorySection
-              label="나"
-              placeholder="오늘 나를 위해 한 일, 컨디션"
-              value={form.cats.self}
-              suggestions={SUGGESTED_TAGS.self}
-              onText={(v) => setCat("self", { text: v })}
-              onToggleTag={(t) => toggleTag("self", t)}
+            {/* 영역 탭: 한 번에 하나만 보여서 칸이 적어 보임 */}
+            <div style={styles.tabRow}>
+              {AREAS.map((a) => (
+                <button
+                  key={a.key}
+                  onClick={() => setArea(a.key)}
+                  style={{ ...styles.tabBtn, ...(area === a.key ? styles.tabBtnActive : {}) }}
+                >
+                  {a.label}
+                  {isFilled(form.cats[a.key]) && <span style={styles.tabDot} />}
+                </button>
+              ))}
+            </div>
+
+            <AreaCard
+              key={area}
+              area={current}
+              value={form.cats[area]}
+              suggestions={SUGGESTED_TAGS[area]}
+              onChange={(patch) => setCat(area, patch)}
+              onToggleTag={(t) => toggleTag(area, t)}
             />
 
-            {/* 루틴 체크 */}
+            {/* 루틴: 한 줄로 간단히 */}
             <div style={styles.section}>
               <div style={styles.sectionHead}>
                 <div style={styles.sectionLabel}>오늘의 루틴</div>
@@ -250,20 +240,12 @@ export default function DailyReview() {
                   editRoutines ? (
                     <span key={r} style={styles.chipEditing}>
                       {r}
-                      <button
-                        style={styles.chipRemove}
-                        onClick={() => saveRoutineList(routineList.filter((x) => x !== r))}
-                        aria-label={`${r} 삭제`}
-                      >
+                      <button style={styles.chipRemove} onClick={() => saveRoutineList(routineList.filter((x) => x !== r))} aria-label={`${r} 삭제`}>
                         <X size={12} color="#DC5B45" />
                       </button>
                     </span>
                   ) : (
-                    <button
-                      key={r}
-                      onClick={() => toggleRoutine(r)}
-                      style={{ ...styles.routineChip, ...(form.routines[r] ? styles.routineChipOn : {}) }}
-                    >
+                    <button key={r} onClick={() => toggleRoutine(r)} style={{ ...styles.routineChip, ...(form.routines[r] ? styles.routineChipOn : {}) }}>
                       {form.routines[r] && <Check size={13} style={{ marginRight: 4 }} />}
                       {r}
                     </button>
@@ -272,12 +254,7 @@ export default function DailyReview() {
               </div>
               {editRoutines && (
                 <div style={styles.addRow}>
-                  <input
-                    style={styles.addInput}
-                    placeholder="새 루틴 (예: 스트레칭)"
-                    value={newRoutine}
-                    onChange={(e) => setNewRoutine(e.target.value)}
-                  />
+                  <input style={styles.addInput} placeholder="새 루틴 (예: 스트레칭)" value={newRoutine} onChange={(e) => setNewRoutine(e.target.value)} />
                   <button
                     style={styles.addBtn}
                     onClick={() => {
@@ -291,19 +268,6 @@ export default function DailyReview() {
                 </div>
               )}
             </div>
-
-            <TextSection
-              label="오늘 하루 잘한 점"
-              placeholder="업무 외에 스스로 잘했다고 느낀 점"
-              value={form.good}
-              onChange={(v) => setForm((f) => ({ ...f, good: v }))}
-            />
-            <TextSection
-              label="오늘 하루 보완할 점"
-              placeholder="다음엔 이렇게 해보면 좋겠다 싶은 점"
-              value={form.improve}
-              onChange={(v) => setForm((f) => ({ ...f, improve: v }))}
-            />
 
             <button style={styles.saveBtn} onClick={save} disabled={saving}>
               {savedFlash ? (
@@ -325,18 +289,10 @@ export default function DailyReview() {
                   const total = Object.keys(r).length;
                   const done = Object.values(r).filter(Boolean).length;
                   return (
-                    <button
-                      key={row.date}
-                      style={{ ...styles.historyRow, ...(row.date === date ? styles.historyRowActive : {}) }}
-                      onClick={() => setDate(row.date)}
-                    >
+                    <button key={row.date} style={{ ...styles.historyRow, ...(row.date === date ? styles.historyRowActive : {}) }} onClick={() => setDate(row.date)}>
                       <span style={styles.historyMood}>{row.mood || "🙂"}</span>
                       <span style={styles.historyDate}>{fmtFull(row.date)}</span>
-                      {total > 0 && (
-                        <span style={styles.historyRoutine}>
-                          루틴 {done}/{total}
-                        </span>
-                      )}
+                      {total > 0 && <span style={styles.historyRoutine}>루틴 {done}/{total}</span>}
                     </button>
                   );
                 })}
@@ -349,92 +305,73 @@ export default function DailyReview() {
   );
 }
 
-function CategorySection({ label, placeholder, value, suggestions, onText, onToggleTag, reflect, onGood, onImprove }) {
+function AreaCard({ area, value, suggestions, onChange, onToggleTag }) {
+  const [showTags, setShowTags] = useState(false);
   const [custom, setCustom] = useState("");
-  // 추천 태그 + 내가 직접 추가한 태그를 함께 보여줌
   const allTags = [...suggestions, ...value.tags.filter((t) => !suggestions.includes(t))];
   const addCustom = () => {
     const v = custom.trim().replace(/^#/, "");
     if (v && !value.tags.includes(v)) onToggleTag(v);
     setCustom("");
   };
+
   return (
     <div style={styles.section}>
-      <div style={styles.sectionLabel}>{label}</div>
-      <textarea
-        style={styles.textarea}
-        rows={3}
-        placeholder={placeholder}
-        value={value.text}
-        onChange={(e) => onText(e.target.value)}
-      />
-      {reflect && (
-        <>
-          <div style={styles.subLabelGood}>👍 잘한 일</div>
-          <textarea
-            style={styles.subTextarea}
-            rows={2}
-            placeholder="업무에서 잘 해낸 것"
-            value={value.good}
-            onChange={(e) => onGood(e.target.value)}
-          />
-          <div style={styles.subLabelImprove}>🔧 보완할 일</div>
-          <textarea
-            style={styles.subTextarea}
-            rows={2}
-            placeholder="다음엔 이렇게 해보면 좋겠다 싶은 것"
-            value={value.improve}
-            onChange={(e) => onImprove(e.target.value)}
-          />
-        </>
-      )}
-      <div style={styles.chipWrap}>
-        {allTags.map((t) => (
-          <button
-            key={t}
-            onClick={() => onToggleTag(t)}
-            style={{ ...styles.tagChip, ...(value.tags.includes(t) ? styles.tagChipOn : {}) }}
-          >
-            #{t}
-          </button>
+      <Field label="📝 있었던 일" placeholder={area.hint} value={value.text} onChange={(v) => onChange({ text: v })} rows={3} />
+      <Field label="👍 잘한 일" color="#4F46E5" placeholder="잘 해낸 것" value={value.good} onChange={(v) => onChange({ good: v })} />
+      <Field label="🔧 보완할 일" color="#C27C0E" placeholder="다음엔 이렇게 해보고 싶은 것" value={value.improve} onChange={(v) => onChange({ improve: v })} />
+
+      {/* 태그: 평소엔 선택한 것만, 누르면 펼쳐짐 */}
+      <div style={styles.tagBar}>
+        {value.tags.map((t) => (
+          <span key={t} style={{ ...styles.tagChip, ...styles.tagChipOn }}>#{t}</span>
         ))}
-      </div>
-      <div style={styles.addRow}>
-        <input
-          style={styles.addInput}
-          placeholder="태그 직접 추가"
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") addCustom();
-          }}
-        />
-        <button style={styles.addBtn} onClick={addCustom} aria-label="태그 추가">
-          <Plus size={15} color="#fff" />
+        <button style={styles.tagToggle} onClick={() => setShowTags((v) => !v)}>
+          <Hash size={12} style={{ marginRight: 3 }} />
+          {showTags ? "닫기" : value.tags.length ? "태그 수정" : "태그 추가"}
         </button>
       </div>
+      {showTags && (
+        <div style={styles.tagPanel}>
+          <div style={styles.chipWrap}>
+            {allTags.map((t) => (
+              <button key={t} onClick={() => onToggleTag(t)} style={{ ...styles.tagChip, ...(value.tags.includes(t) ? styles.tagChipOn : {}) }}>
+                #{t}
+              </button>
+            ))}
+          </div>
+          <div style={styles.addRow}>
+            <input
+              style={styles.addInput}
+              placeholder="태그 직접 추가"
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addCustom();
+              }}
+            />
+            <button style={styles.addBtn} onClick={addCustom} aria-label="태그 추가">
+              <Plus size={15} color="#fff" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function TextSection({ label, placeholder, value, onChange }) {
+function Field({ label, placeholder, value, onChange, rows = 2, color = "#5B6470" }) {
   return (
-    <div style={styles.section}>
-      <div style={styles.sectionLabel}>{label}</div>
-      <textarea
-        style={styles.textarea}
-        rows={2}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ ...styles.fieldLabel, color }}>{label}</div>
+      <textarea style={styles.fieldInput} rows={rows} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
 
 const styles = {
   app: { minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", color: "#1F2937" },
-  header: { padding: "20px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
+  header: { padding: "18px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
   brandRow: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 },
   brandName: { fontSize: 15, fontWeight: 800, color: "#4F46E5", letterSpacing: 0.3 },
   brandSub: { fontSize: 11.5, color: "#9AA3AF", fontWeight: 600 },
@@ -443,22 +380,27 @@ const styles = {
   dateWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
   dateBig: { fontSize: 18, fontWeight: 700, color: "#1F2937" },
   todayBtn: { background: "#EEF0FF", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, color: "#4F46E5" },
-  moodRow: { display: "flex", justifyContent: "center", gap: 8, marginTop: 16 },
+  moodRow: { display: "flex", justifyContent: "center", gap: 8, marginTop: 14 },
   moodCol: { background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: 0 },
   moodBtn: { fontSize: 22, background: "#F0F2F4", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" },
   moodBtnActive: { background: "#EEF0FF", boxShadow: "0 0 0 2px #4F46E5 inset" },
   moodLabel: { fontSize: 11, color: "#9AA3AF", fontWeight: 600 },
-  body: { flex: 1, padding: "18px 16px 60px" },
+  body: { flex: 1, padding: "16px 16px 60px" },
   loadingWrap: { display: "flex", justifyContent: "center", padding: "60px 0" },
-  section: { background: "#FFFFFF", borderRadius: 14, padding: "12px 14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
-  sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  sectionLabel: { fontSize: 13, fontWeight: 700, color: "#5B6470", marginBottom: 6 },
+  tabRow: { display: "flex", background: "#ECEEF1", borderRadius: 12, padding: 3, gap: 2, marginBottom: 10 },
+  tabBtn: { flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0", borderRadius: 9, border: "none", background: "transparent", color: "#8A93A0", fontSize: 14, fontWeight: 700 },
+  tabBtnActive: { background: "#FFFFFF", color: "#4F46E5", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
+  tabDot: { width: 6, height: 6, borderRadius: "50%", background: "#4F46E5", marginLeft: 5 },
+  section: { background: "#FFFFFF", borderRadius: 14, padding: "14px 14px 12px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
+  sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  sectionLabel: { fontSize: 13, fontWeight: 700, color: "#5B6470" },
+  fieldLabel: { fontSize: 12.5, fontWeight: 700, marginBottom: 4 },
+  fieldInput: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "8px 10px", outline: "none", fontSize: 16, color: "#1F2937", background: "#FAFBFC", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
   iconBtn: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0 },
   iconBtnText: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
-  textarea: { width: "100%", boxSizing: "border-box", border: "none", outline: "none", fontSize: 16, color: "#1F2937", background: "transparent", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
-  subLabelGood: { fontSize: 12, fontWeight: 700, color: "#4F46E5", marginTop: 8, marginBottom: 4 },
-  subLabelImprove: { fontSize: 12, fontWeight: 700, color: "#C27C0E", marginTop: 8, marginBottom: 4 },
-  subTextarea: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "8px 10px", outline: "none", fontSize: 16, color: "#1F2937", background: "#FAFBFC", resize: "none", fontFamily: "inherit", lineHeight: 1.5 },
+  tagBar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 },
+  tagToggle: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "5px 10px", fontSize: 12, fontWeight: 700, color: "#5B6470" },
+  tagPanel: { marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E5E9EC" },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
   tagChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20 },
   tagChipOn: { background: "#EEF0FF", borderColor: "#C7CCFF", color: "#4F46E5" },
