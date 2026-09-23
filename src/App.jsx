@@ -448,6 +448,48 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  const restoreFromServer = async () => {
+    try {
+      const res = await fetch(`/api/backup?key=${encodeURIComponent(STORAGE_KEY)}`);
+      if (!res.ok) throw new Error("서버 응답 오류");
+      const row = await res.json();
+      if (!row || !row.data) {
+        window.alert("서버에 저장된 백업이 아직 없어요.");
+        return;
+      }
+      const data = JSON.parse(row.data);
+      const importedItems = Array.isArray(data) ? data.map(normalizeItem) : null;
+      if (!importedItems) {
+        window.alert("서버 백업 데이터 형식이 올바르지 않아요.");
+        return;
+      }
+      const updatedAt = row.updated_at ? new Date(row.updated_at).toLocaleString("ko-KR") : "";
+      const ok = window.confirm(
+        `서버에 저장된 백업(${importedItems.length}개 일정, ${updatedAt} 기준)으로 지금 데이터를 덮어쓸까요? 현재 데이터는 사라져요.`
+      );
+      if (!ok) return;
+      persist(importedItems);
+
+      // 프리셋도 함께 복원 시도 (있으면, 실패해도 무시)
+      try {
+        const presetRes = await fetch(`/api/backup?key=${encodeURIComponent(PRESET_KEY)}`);
+        if (presetRes.ok) {
+          const presetRow = await presetRes.json();
+          if (presetRow && presetRow.data) {
+            const presetData = JSON.parse(presetRow.data);
+            if (Array.isArray(presetData)) persistPresets(presetData);
+          }
+        }
+      } catch (e) {
+        // 프리셋 복원 실패는 무시
+      }
+
+      window.alert("서버 백업을 불러왔어요.");
+    } catch (err) {
+      window.alert("서버에서 백업을 불러오는 데 실패했어요. 인터넷 연결을 확인해주세요.");
+    }
+  };
+
   if (items === null || presets === null) {
     return (
       <div style={styles.loadingWrap}>
@@ -549,6 +591,7 @@ export default function App() {
             onClose={() => setModal(null)}
             onExport={exportBackup}
             onImport={importBackup}
+            onRestoreServer={restoreFromServer}
           />
         ) : modal && modal.mode === "view" ? (
           <ViewModal
@@ -1265,7 +1308,7 @@ function ChecklistEditor({ items, onChange }) {
 
 // ---------- 일정 상세 보기 (읽기 전용 + 체크리스트 체크는 가능) ----------
 // ---------- 백업 관리 화면 ----------
-function BackupScreen({ lastBackupAt, itemCount, onClose, onExport, onImport }) {
+function BackupScreen({ lastBackupAt, itemCount, onClose, onExport, onImport, onRestoreServer }) {
   const fileInputRef = useRef(null);
   const lastBackupText = lastBackupAt
     ? fmtFull(lastBackupAt.slice(0, 10)) + ` ${lastBackupAt.slice(11, 16)}`
@@ -1317,6 +1360,17 @@ function BackupScreen({ lastBackupAt, itemCount, onClose, onExport, onImport }) 
             e.target.value = "";
           }}
         />
+      </div>
+
+      <div style={styles.viewSection}>
+        <div style={styles.viewSectionLabel}>서버 백업에서 복원하기</div>
+        <div style={{ fontSize: 12.5, color: "#8A93A0", marginBottom: 10, lineHeight: 1.5 }}>
+          이 앱은 변경할 때마다 자동으로 서버에도 백업돼요. 폰을 바꾸거나 데이터가 사라졌을 때, 서버에 저장된 최신 백업으로 되돌릴 수 있어요. (현재 데이터는 사라져요)
+        </div>
+        <button onClick={onRestoreServer} style={styles.registerChecklistBtn}>
+          <ShieldCheck size={14} style={{ marginRight: 6 }} />
+          서버에서 복원하기
+        </button>
       </div>
     </div>
   );
