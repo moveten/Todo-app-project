@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { C, F, shared } from "./theme";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -31,7 +32,7 @@ const PERIODS = [
   { key: 0, label: "전체" },
 ];
 
-const INDIGO = "#4F46E5";
+const INDIGO = C.wine;
 
 export default function Stats() {
   const [period, setPeriod] = useState(30);
@@ -157,16 +158,16 @@ function MoodTrend({ points }) {
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="기분 추이 그래프">
         {[1, 2, 3, 4, 5].map((v) => (
           <g key={v}>
-            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#EEF1F3" strokeWidth="1" />
+            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke={C.line} strokeWidth="1" />
             <text x={padL - 6} y={y(v) + 4} fontSize="11" textAnchor="end">{MOOD_EMOJI[v]}</text>
           </g>
         ))}
         <path d={path} fill="none" stroke={INDIGO} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
-          <circle key={p.date} cx={x(i)} cy={y(p.score)} r="3.2" fill="#fff" stroke={INDIGO} strokeWidth="2" />
+          <circle key={p.date} cx={x(i)} cy={y(p.score)} r="3.2" fill={C.paper} stroke={INDIGO} strokeWidth="2" />
         ))}
         {labelIdx.map((i) => (
-          <text key={i} x={x(i)} y={H - 6} fontSize="10.5" fill="#9AA3AF" textAnchor="middle">{fmtShort(points[i].date)}</text>
+          <text key={i} x={x(i)} y={H - 6} fontSize="10.5" fill={C.ink2} textAnchor="middle">{fmtShort(points[i].date)}</text>
         ))}
       </svg>
     </Card>
@@ -194,7 +195,7 @@ function Weekday({ weekday }) {
             <div key={i} style={s.barCol}>
               <div style={s.barValue}>{avg ?? ""}</div>
               <div style={s.barTrack}>
-                <div style={{ ...s.barFill, height: h, background: v && best && v.dow === best.dow ? INDIGO : "#C7CCFF" }} />
+                <div style={{ ...s.barFill, height: h, background: v && best && v.dow === best.dow ? INDIGO : C.paperAlt }} />
               </div>
               <div style={s.barLabel}>{names[order[i]]}</div>
             </div>
@@ -207,7 +208,7 @@ function Weekday({ weekday }) {
 
 function TimeAttackStats({ ta }) {
   if (!ta || !ta.days.length) return null;
-  const color = (n) => (n == null ? "#E5E9EC" : n >= 100 ? INDIGO : n >= 70 ? "#A5ACF7" : n > 0 ? "#F2C46B" : "#F2B8AE");
+  const color = (n) => (n == null ? C.line : n >= 100 ? C.wine : n >= 70 ? C.wine : n > 0 ? C.ochre : C.brick);
   return (
     <Card title="⏱ 기록 타임어택" sub="안 쓴 날은 0점이에요">
       <div style={s.taRow}>
@@ -224,14 +225,14 @@ function TimeAttackStats({ ta }) {
           <div style={s.taLabel}>자정 전 기록</div>
         </div>
         <div style={s.taStat}>
-          <div style={{ ...s.taNum, color: "#DC5B45" }}>{ta.zero}</div>
+          <div style={{ ...s.taNum, color: C.brick }}>{ta.zero}</div>
           <div style={s.taLabel}>0점</div>
         </div>
       </div>
       <div style={s.taBars}>
         {ta.days.map((d) => (
           <div key={d.date} style={s.taBarCol} title={`${d.date} ${d.score ?? "-"}`}>
-            <div style={{ ...s.taBar, height: d.score == null ? 4 : Math.max(4, (d.score / 100) * 60), background: color(d.score), ...(d.pending ? { border: "1px dashed #A5ACF7", background: "transparent" } : {}) }} />
+            <div style={{ ...s.taBar, height: d.score == null ? 4 : Math.max(4, (d.score / 100) * 60), background: color(d.score), ...(d.pending ? { border: `1px dashed ${C.wine}`, background: "transparent" } : {}) }} />
           </div>
         ))}
       </div>
@@ -346,7 +347,7 @@ function CheckMood({ items }) {
   return (
     <Card title="어떤 행동이 기분에 도움이 될까" sub="체크한 날 vs 안 한 날의 평균 기분">
       {items.map((x) => {
-        const color = x.diff > 0 ? INDIGO : x.diff < 0 ? "#DC5B45" : "#8A93A0";
+        const color = x.diff > 0 ? INDIGO : x.diff < 0 ? C.brick : C.ink2;
         return (
           <div key={x.name} style={s.relRow}>
             <span style={{ ...s.relTag, flex: 1 }}>{x.name}</span>
@@ -422,7 +423,7 @@ function TagMood({ tagMood }) {
     <Card title="태그와 기분의 관계" sub="그 태그가 있던 날 vs 없던 날의 평균 기분">
       {tagMood.map((t) => {
         const diff = Math.round((t.withAvg - t.withoutAvg) * 10) / 10;
-        const color = diff > 0 ? INDIGO : diff < 0 ? "#DC5B45" : "#8A93A0";
+        const color = diff > 0 ? INDIGO : diff < 0 ? C.brick : C.ink2;
         return (
           <div key={t.tag} style={s.relRow}>
             <span style={s.relTag}>#{t.tag}</span>
@@ -479,61 +480,61 @@ function Reflections({ items }) {
 }
 
 const s = {
-  body: { flex: 1, padding: "12px 16px 60px", borderTop: "1px solid #EBEEF0" },
-  periodRow: { display: "flex", background: "#ECEEF1", borderRadius: 10, padding: 3, gap: 2, marginBottom: 12 },
-  periodBtn: { flex: 1, border: "none", background: "transparent", color: "#8A93A0", fontSize: 13, fontWeight: 700, padding: "8px 0", borderRadius: 8 },
-  periodBtnOn: { background: "#fff", color: INDIGO, boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
+  body: { flex: 1, padding: "0 20px 60px" },
+  periodRow: { display: "flex", gap: 18, marginBottom: 8, borderBottom: `1px solid ${C.line}`, padding: "0 0 12px" },
+  periodBtn: { border: "none", background: "transparent", color: C.ink2, fontSize: 13, fontWeight: 500, padding: 0, fontFamily: F.sans },
+  periodBtnOn: { color: C.wine, fontWeight: 600 },
   center: { display: "flex", justifyContent: "center", padding: "60px 0" },
-  empty: { textAlign: "center", color: "#8A93A0", fontSize: 13.5, padding: "60px 20px", lineHeight: 1.6 },
-  card: { background: "#fff", borderRadius: 14, padding: "14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
-  cardTitle: { fontSize: 14.5, fontWeight: 800, color: "#1F2937" },
-  cardSub: { fontSize: 12, color: "#8A93A0", marginTop: 2, marginBottom: 8 },
-  hint: { fontSize: 12.5, color: "#9AA3AF", padding: "8px 0" },
-  summaryRow: { display: "flex", gap: 8, marginBottom: 10 },
-  summaryBox: { flex: 1, background: "#fff", borderRadius: 14, padding: "12px 6px", textAlign: "center", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
-  summaryNum: { fontSize: 17, fontWeight: 800, color: INDIGO },
-  summaryLabel: { fontSize: 11, color: "#8A93A0", fontWeight: 600, marginTop: 3 },
-  barRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 6, marginTop: 8 },
+  empty: { textAlign: "center", color: C.ink2, fontSize: 13.5, padding: "60px 20px", lineHeight: 1.6 },
+  card: { ...shared.section },
+  cardTitle: { fontSize: 15, fontWeight: 600, color: C.ink, fontFamily: F.serif },
+  cardSub: { fontSize: 12, color: C.ink2, marginTop: 3, marginBottom: 10 },
+  hint: { fontSize: 12.5, color: C.ink2, padding: "8px 0" },
+  summaryRow: { display: "flex", padding: "16px 0", borderTop: `1px solid ${C.line}` },
+  summaryBox: { flex: 1, textAlign: "center", borderLeft: `1px solid ${C.line}` },
+  summaryNum: { fontSize: 19, fontWeight: 700, color: C.wine, fontFamily: F.serif },
+  summaryLabel: { fontSize: 11, color: C.ink2, fontWeight: 500, marginTop: 3 },
+  barRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 6, marginTop: 10 },
   barCol: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
-  barValue: { fontSize: 10.5, color: "#5B6470", fontWeight: 700, height: 14 },
-  barTrack: { width: "100%", maxWidth: 28, height: 90, background: "#F3F4F6", borderRadius: 6, display: "flex", alignItems: "flex-end", overflow: "hidden" },
-  barFill: { width: "100%", borderRadius: 6 },
-  barLabel: { fontSize: 11.5, color: "#8A93A0", fontWeight: 700 },
-  progRow: { marginTop: 10 },
-  progHead: { display: "flex", justifyContent: "space-between", marginBottom: 4 },
-  progName: { fontSize: 13, fontWeight: 700, color: "#1F2937" },
-  progNum: { fontSize: 12, color: "#8A93A0" },
-  progTrack: { height: 8, background: "#F0F2F4", borderRadius: 6, overflow: "hidden" },
-  progFill: { height: "100%", background: INDIGO, borderRadius: 6 },
-  taRow: { display: "flex", gap: 6, marginTop: 8 },
-  taStat: { flex: 1, textAlign: "center", background: "#F7F8FA", borderRadius: 10, padding: "8px 2px" },
-  taNum: { fontSize: 17, fontWeight: 800, color: INDIGO },
-  taLabel: { fontSize: 10.5, color: "#8A93A0", fontWeight: 700, marginTop: 2 },
-  taBars: { display: "flex", alignItems: "flex-end", gap: 2, height: 64, marginTop: 12 },
+  barValue: { fontSize: 10.5, color: C.ink2, fontWeight: 500, height: 14 },
+  barTrack: { width: "100%", maxWidth: 24, height: 90, background: C.paperAlt, display: "flex", alignItems: "flex-end", overflow: "hidden" },
+  barFill: { width: "100%" },
+  barLabel: { fontSize: 11.5, color: C.ink2, fontWeight: 500 },
+  progRow: { marginTop: 12 },
+  progHead: { display: "flex", justifyContent: "space-between", marginBottom: 5 },
+  progName: { fontSize: 13, fontWeight: 500, color: C.ink },
+  progNum: { fontSize: 12, color: C.ink2 },
+  progTrack: { height: 3, background: C.paperAlt, overflow: "hidden" },
+  progFill: { height: "100%", background: C.wine },
+  taRow: { display: "flex", padding: "16px 0", borderTop: `1px solid ${C.line}` },
+  taStat: { flex: 1, textAlign: "center", borderLeft: `1px solid ${C.line}` },
+  taNum: { fontSize: 17, fontWeight: 700, color: C.wine, fontFamily: F.serif },
+  taLabel: { fontSize: 10.5, color: C.ink2, fontWeight: 500, marginTop: 3 },
+  taBars: { display: "flex", alignItems: "flex-end", gap: 2, height: 60, marginTop: 14 },
   taBarCol: { flex: 1, display: "flex", alignItems: "flex-end", height: "100%" },
-  taBar: { width: "100%", borderRadius: 3, boxSizing: "border-box" },
-  taAxis: { display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "#9AA3AF", marginTop: 4 },
-  areaMoodNote: { fontSize: 11.5, color: "#8A93A0", marginTop: 4 },
+  taBar: { width: "100%", boxSizing: "border-box" },
+  taAxis: { display: "flex", justifyContent: "space-between", fontSize: 10.5, color: C.ink2, marginTop: 5 },
+  areaMoodNote: { fontSize: 11.5, color: C.ink2, marginTop: 4 },
   planRateRow: { display: "flex", alignItems: "baseline", gap: 8, margin: "6px 0" },
-  planRate: { fontSize: 24, fontWeight: 800, color: INDIGO },
-  planRateLabel: { fontSize: 12, color: "#8A93A0", fontWeight: 600 },
-  planItem: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid #F3F4F6", fontSize: 13 },
-  planItemText: { flex: 1, color: "#1F2937" },
-  planItemDate: { fontSize: 11.5, color: "#9AA3AF" },
-  areaLabel: { fontSize: 12, fontWeight: 800, color: "#5B6470", marginTop: 8 },
+  planRate: { fontSize: 24, fontWeight: 700, color: C.wine, fontFamily: F.serif },
+  planRateLabel: { fontSize: 12, color: C.ink2, fontWeight: 500 },
+  planItem: { display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${C.line}`, fontSize: 13 },
+  planItemText: { flex: 1, color: C.ink },
+  planItemDate: { fontSize: 11.5, color: C.ink2 },
+  areaLabel: { fontSize: 11.5, fontWeight: 500, color: C.ink2, marginTop: 10 },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  tagChip: { background: "#EEF0FF", color: INDIGO, fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20 },
-  relRow: { display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6" },
-  relTag: { fontSize: 13, fontWeight: 700, color: "#1F2937", minWidth: 60 },
-  relVals: { flex: 1, fontSize: 12, color: "#8A93A0" },
-  relDiff: { fontSize: 13.5, fontWeight: 800 },
-  filterRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 10, marginBottom: 6 },
-  filterBtn: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 700, padding: "5px 11px", borderRadius: 20 },
-  filterGoodOn: { background: "#EEF0FF", border: "1px solid #C7CCFF", color: INDIGO },
-  filterImproveOn: { background: "#FDF3DC", border: "1px solid #F3DDA6", color: "#B06A00" },
-  areaBtn: { border: "none", background: "transparent", color: "#9AA3AF", fontSize: 12, fontWeight: 700, padding: "4px 4px" },
-  areaBtnOn: { color: "#1F2937", textDecoration: "underline", textUnderlineOffset: 3 },
-  refRow: { padding: "9px 0", borderBottom: "1px solid #F3F4F6" },
-  refMeta: { fontSize: 11.5, color: "#9AA3AF", fontWeight: 600, marginBottom: 2 },
-  refText: { fontSize: 13.5, color: "#1F2937", lineHeight: 1.5, whiteSpace: "pre-wrap" },
+  tagChip: { ...shared.chip },
+  relRow: { display: "flex", alignItems: "center", gap: 8, padding: "9px 0", borderBottom: `1px solid ${C.line}` },
+  relTag: { fontSize: 13, fontWeight: 500, color: C.ink, minWidth: 60 },
+  relVals: { flex: 1, fontSize: 12, color: C.ink2 },
+  relDiff: { fontSize: 13.5, fontWeight: 600 },
+  filterRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 12, marginBottom: 8 },
+  filterBtn: { ...shared.chip },
+  filterGoodOn: { ...shared.chipOn },
+  filterImproveOn: { background: C.ochreSoft, border: `1px solid ${C.ochre}55`, color: C.ochre },
+  areaBtn: { border: "none", background: "transparent", color: C.ink2, fontSize: 12, fontWeight: 500, padding: "4px 4px", fontFamily: F.sans },
+  areaBtnOn: { color: C.ink, textDecoration: "underline", textUnderlineOffset: 3 },
+  refRow: { padding: "10px 0", borderBottom: `1px solid ${C.line}` },
+  refMeta: { fontSize: 11.5, color: C.ink2, fontWeight: 500, marginBottom: 3 },
+  refText: { fontSize: 13.5, color: C.ink, lineHeight: 1.55, whiteSpace: "pre-wrap" },
 };

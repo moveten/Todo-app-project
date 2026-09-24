@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Search, Plus, X, Check, Loader2, Download, Copy, Settings2, ChevronDown } from "lucide-react";
+import { C, F, shared } from "./theme";
 
 const CAT_KEY = "powerlog:note-categories";
 const DEFAULT_CATS = [
@@ -174,11 +175,11 @@ export default function Notes() {
   return (
     <div style={s.body}>
       <div style={s.searchRow}>
-        <Search size={15} color="#9AA3AF" style={{ marginLeft: 10 }} />
+        <Search size={15} color={C.ink2} style={{ marginLeft: 0 }} />
         <input style={s.searchInput} placeholder="메모 검색 (예: 소아과)" value={query} onChange={(e) => onSearchChange(e.target.value)} />
         {query && (
           <button style={s.clearBtn} onClick={() => onSearchChange("")} aria-label="검색어 지우기">
-            <X size={14} color="#9AA3AF" />
+            <X size={14} color={C.ink2} />
           </button>
         )}
       </div>
@@ -199,7 +200,7 @@ export default function Notes() {
                 }}
                 aria-label={`${c.label} 삭제`}
               >
-                <X size={11} color="#DC5B45" />
+                <X size={11} color={C.brick} />
               </button>
             </span>
           ) : (
@@ -231,7 +232,7 @@ export default function Notes() {
 
       {loading ? (
         <div style={s.center}>
-          <Loader2 size={20} color="#4F46E5" />
+          <Loader2 size={20} color={C.wine} />
         </div>
       ) : notes.length === 0 ? (
         <div style={s.empty}>{query ? "검색 결과가 없어요." : "아직 메모가 없어요. 위 버튼으로 추가해보세요."}</div>
@@ -293,7 +294,7 @@ function NewCategory({ onAdd, existing }) {
           setLabel("");
         }}
       >
-        <Plus size={14} color="#fff" />
+        <Plus size={14} color={C.paper} />
       </button>
     </div>
   );
@@ -369,47 +370,47 @@ function NoteEditor({ note, cats, onCancel, onSave, onDelete }) {
 }
 
 const s = {
-  body: { flex: 1, padding: "12px 16px 60px" },
-  searchRow: { display: "flex", alignItems: "center", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
-  searchInput: { flex: 1, border: "none", outline: "none", padding: "11px 10px", fontSize: 16, background: "transparent", fontFamily: "inherit" },
-  clearBtn: { background: "none", border: "none", padding: "0 10px", display: "flex" },
-  catRow: { display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 4 },
-  catChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#5B6470", fontSize: 13, fontWeight: 700, padding: "7px 12px", borderRadius: 20 },
-  catChipOn: { background: "#EEF0FF", border: "1px solid #C7CCFF", color: "#4F46E5" },
-  catEditBtn: { border: "none", background: "#F0F2F4", color: "#8A93A0", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: "auto" },
-  catEditing: { display: "inline-flex", alignItems: "center", gap: 4, border: "1px dashed #D7DCE1", background: "#fff", fontSize: 13, fontWeight: 700, color: "#5B6470", padding: "6px 6px 6px 12px", borderRadius: 20 },
-  catDel: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
+  body: { flex: 1, padding: "0 20px 60px" },
+  searchRow: { display: "flex", alignItems: "center", borderBottom: `1px solid ${C.line}`, marginBottom: 14 },
+  searchInput: { flex: 1, border: "none", outline: "none", padding: "10px 0", fontSize: 16, background: "transparent", fontFamily: F.sans, color: C.ink },
+  clearBtn: { background: "none", border: "none", padding: "0 4px", display: "flex" },
+  catRow: { display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 6 },
+  catChip: { ...shared.chip },
+  catChipOn: { ...shared.chipOn },
+  catEditBtn: { border: "none", background: "none", color: C.ink2, borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: "auto" },
+  catEditing: { display: "inline-flex", alignItems: "center", gap: 4, border: `1px dashed ${C.line}`, background: "none", fontSize: 13, fontWeight: 500, color: C.ink2, padding: "6px 6px 6px 12px", borderRadius: 20, fontFamily: F.sans },
+  catDel: { background: "none", border: "none", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
   newCatRow: { display: "flex", gap: 6, margin: "8px 0" },
-  emojiInput: { width: 44, textAlign: "center", border: "1px solid #E5E9EC", borderRadius: 10, padding: "8px 4px", fontSize: 16 },
-  newCatInput: { flex: 1, border: "1px solid #E5E9EC", borderRadius: 10, padding: "8px 10px", fontSize: 16, outline: "none", fontFamily: "inherit" },
-  addBtnSmall: { background: "#4F46E5", border: "none", borderRadius: 10, width: 38, display: "flex", alignItems: "center", justifyContent: "center" },
-  addBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", border: "1px dashed #C7CCFF", background: "#fff", color: "#4F46E5", fontSize: 14, fontWeight: 700, padding: "12px 0", borderRadius: 12, margin: "10px 0" },
+  emojiInput: { width: 42, textAlign: "center", border: `1px solid ${C.line}`, borderRadius: 8, padding: "8px 4px", fontSize: 16, background: "transparent" },
+  newCatInput: { ...shared.input, flex: 1, borderRadius: 8 },
+  addBtnSmall: { background: C.wine, border: "none", borderRadius: 8, width: 38, display: "flex", alignItems: "center", justifyContent: "center" },
+  addBtn: { ...shared.btnSecondary, margin: "4px 0 16px" },
   center: { display: "flex", justifyContent: "center", padding: "40px 0" },
-  empty: { textAlign: "center", color: "#9AA3AF", fontSize: 13.5, padding: "40px 20px", lineHeight: 1.6 },
-  noteCard: { width: "100%", textAlign: "left", background: "#fff", borderRadius: 14, padding: "12px 14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 8, border: "none" },
-  noteHead: { display: "flex", justifyContent: "space-between", marginBottom: 4 },
-  noteCat: { fontSize: 11.5, fontWeight: 800, color: "#4F46E5" },
-  noteDate: { fontSize: 11, color: "#B0B7C0" },
-  noteTitle: { fontSize: 14.5, fontWeight: 800, color: "#1F2937" },
-  noteBody: { fontSize: 13, color: "#5B6470", marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" },
-  noteTags: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  tagMini: { fontSize: 11.5, color: "#4F46E5", fontWeight: 600 },
-  editor: { background: "#fff", borderRadius: 14, padding: "14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
-  editorCatRow: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 },
-  editorCatChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 700, padding: "6px 10px", borderRadius: 20 },
-  editorCatChipOn: { background: "#EEF0FF", border: "1px solid #C7CCFF", color: "#4F46E5" },
-  titleInput: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "9px 10px", fontSize: 15, fontWeight: 700, outline: "none", marginBottom: 8, fontFamily: "inherit" },
-  bodyInput: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "9px 10px", fontSize: 16, outline: "none", resize: "none", fontFamily: "inherit", lineHeight: 1.5, background: "#FAFBFC" },
-  chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  tagChipOn: { background: "#EEF0FF", border: "1px solid #C7CCFF", color: "#4F46E5", fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: 20, cursor: "pointer" },
-  addRow: { display: "flex", gap: 6, marginTop: 8 },
-  addInput: { flex: 1, minWidth: 0, border: "1px solid #E5E9EC", borderRadius: 10, padding: "7px 10px", fontSize: 16, outline: "none", fontFamily: "inherit" },
-  editorBtnRow: { display: "flex", gap: 8, marginTop: 12 },
-  delBtn: { border: "none", background: "#FBEAE7", color: "#DC5B45", fontSize: 13.5, fontWeight: 700, padding: "10px 14px", borderRadius: 10 },
-  cancelBtn: { flex: 1, border: "1px solid #E5E9EC", background: "#fff", color: "#5B6470", fontSize: 13.5, fontWeight: 700, padding: "10px 0", borderRadius: 10 },
-  saveBtnMain: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "#4F46E5", color: "#fff", fontSize: 13.5, fontWeight: 700, padding: "10px 0", borderRadius: 10 },
-  exportRow: { display: "flex", gap: 8, marginTop: 16 },
-  exportBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #E5E9EC", background: "#fff", color: "#1F2937", fontSize: 13.5, fontWeight: 700, padding: "11px 0", borderRadius: 12 },
-  exportHint: { fontSize: 11.5, color: "#9AA3AF", textAlign: "center", marginTop: 8, lineHeight: 1.5 },
-  toast: { position: "fixed", left: "50%", bottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)", transform: "translateX(-50%)", background: "rgba(31,41,55,0.92)", color: "#fff", fontSize: 13, fontWeight: 600, padding: "10px 16px", borderRadius: 20, zIndex: 90, whiteSpace: "nowrap" },
+  empty: { textAlign: "center", color: C.ink2, fontSize: 13.5, padding: "40px 20px", lineHeight: 1.6 },
+  noteCard: { width: "100%", textAlign: "left", background: "none", border: "none", padding: "14px 0", borderBottom: `1px solid ${C.line}` },
+  noteHead: { display: "flex", justifyContent: "space-between", marginBottom: 5 },
+  noteCat: { fontSize: 11, fontWeight: 500, color: C.wine },
+  noteDate: { fontSize: 11, color: C.ink2 },
+  noteTitle: { fontSize: 14.5, fontWeight: 600, color: C.ink, fontFamily: F.serif },
+  noteBody: { fontSize: 13, color: C.ink2, marginTop: 4, lineHeight: 1.55, whiteSpace: "pre-wrap" },
+  noteTags: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 7 },
+  tagMini: { fontSize: 11.5, color: C.ink2, fontWeight: 500 },
+  editor: { ...shared.section, borderTop: "none", paddingTop: 0 },
+  editorCatRow: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
+  editorCatChip: { ...shared.chip },
+  editorCatChipOn: { ...shared.chipOn },
+  titleInput: { ...shared.input, borderRadius: 0, border: "none", borderBottom: `1px solid ${C.line}`, fontSize: 15.5, fontWeight: 600, marginBottom: 10, fontFamily: F.serif, padding: "6px 0" },
+  bodyInput: { ...shared.textarea, borderRadius: 0, border: "none", borderBottom: `1px solid ${C.line}`, padding: "6px 0", background: "transparent" },
+  chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  tagChipOn: { ...shared.chipOn, cursor: "pointer" },
+  addRow: { display: "flex", gap: 8, marginTop: 10 },
+  addInput: { ...shared.input, flex: 1, minWidth: 0, borderRadius: 8 },
+  editorBtnRow: { display: "flex", gap: 8, marginTop: 14 },
+  delBtn: { border: "none", background: "none", color: C.brick, fontSize: 13, fontWeight: 500, padding: "10px 6px", fontFamily: F.sans },
+  cancelBtn: { ...shared.btnSecondary, flex: 1 },
+  saveBtnMain: { ...shared.btnPrimary, flex: 1 },
+  exportRow: { display: "flex", gap: 8, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.line}` },
+  exportBtn: { ...shared.btnSecondary, flex: 1 },
+  exportHint: { fontSize: 11.5, color: C.ink2, textAlign: "center", marginTop: 8, lineHeight: 1.5 },
+  toast: { ...shared.toast },
 };

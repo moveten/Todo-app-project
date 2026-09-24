@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Check, Loader2, Hash, PenLine, BarChart3, Sparkles, FileText, X, Download, Plus, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Loader2, Hash, Sparkles, FileText, X, Download, Plus, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 import Stats from "./Stats.jsx";
 import Notes from "./Notes.jsx";
+import { C, F, shared } from "./theme";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -141,15 +142,13 @@ export default function DailyReview() {
         </div>
         <div style={styles.viewToggle}>
           <button style={{ ...styles.viewBtn, ...(view === "record" ? styles.viewBtnOn : {}) }} onClick={() => setView("record")}>
-            <PenLine size={13} style={{ marginRight: 4 }} />
             기록
           </button>
           <button style={{ ...styles.viewBtn, ...(view === "stats" ? styles.viewBtnOn : {}) }} onClick={() => setView("stats")}>
-            <BarChart3 size={13} style={{ marginRight: 4 }} />
             통계
           </button>
           <button style={{ ...styles.viewBtn, ...(view === "notes" ? styles.viewBtnOn : {}) }} onClick={() => setView("notes")}>
-            📚
+            메모
           </button>
         </div>
       </div>
@@ -551,11 +550,11 @@ function RecordView() {
       <div style={styles.header}>
         <div style={styles.dateNavRow}>
           <button style={styles.navBtn} onClick={() => setDate(addDays(date, -1))} aria-label="이전 날">
-            <ChevronLeft size={18} color="#5B6470" />
+            <ChevronLeft size={18} color={C.ink} />
           </button>
           <div style={styles.dateWrap}>
             <label style={styles.dateBig}>
-              {fmtFull(date)} <ChevronDown size={15} color="#9AA3AF" style={{ verticalAlign: "middle" }} />
+              {fmtFull(date)} <ChevronDown size={14} color={C.ink2} style={{ verticalAlign: "middle" }} />
               <input
                 type="date"
                 value={date}
@@ -572,14 +571,14 @@ function RecordView() {
             )}
           </div>
           <button style={styles.navBtn} onClick={() => setDate(addDays(date, 1))} aria-label="다음 날">
-            <ChevronRight size={18} color="#5B6470" />
+            <ChevronRight size={18} color={C.ink} />
           </button>
         </div>
         <div style={styles.moodRow}>
           {MOODS.map((m) => (
             <button key={m.emoji} onClick={() => setForm((f) => ({ ...f, mood: m.emoji }))} style={styles.moodCol}>
               <span style={{ ...styles.moodBtn, ...(form.mood === m.emoji ? styles.moodBtnActive : {}) }}>{m.emoji}</span>
-              <span style={{ ...styles.moodLabel, ...(form.mood === m.emoji ? { color: "#4F46E5" } : {}) }}>{m.label}</span>
+              <span style={{ ...styles.moodLabel, ...(form.mood === m.emoji ? { color: C.wine } : {}) }}>{m.label}</span>
             </button>
           ))}
         </div>
@@ -588,7 +587,7 @@ function RecordView() {
       <div style={styles.body}>
         {loading ? (
           <div style={styles.loadingWrap}>
-            <Loader2 size={20} color="#4F46E5" />
+            <Loader2 size={20} color={C.wine} />
           </div>
         ) : (
           <>
@@ -716,7 +715,7 @@ function RecordView() {
 
 // ---------------------------------------------------------------------------
 const scoreColor = (n) =>
-  n >= 100 ? { background: "#4F46E5", color: "#fff" } : n >= 70 ? { background: "#EEF0FF", color: "#4F46E5" } : n > 0 ? { background: "#FDF3DC", color: "#B06A00" } : { background: "#FBEAE7", color: "#DC5B45" };
+  n >= 100 ? { background: C.wine, color: C.paper } : n >= 70 ? { background: C.wineSoft, color: C.wine } : n > 0 ? { background: C.ochreSoft, color: C.ochre } : { background: C.brickSoft, color: C.brick };
 
 const fmtLeft = (ms) => {
   const t = Math.max(0, Math.floor(ms / 1000));
@@ -725,6 +724,11 @@ const fmtLeft = (ms) => {
   const sec = t % 60;
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 };
+
+function ScoreDot({ score, pulse }) {
+  const color = score >= 100 ? C.wine : score >= 70 ? C.wine : score > 0 ? C.ochre : C.brick;
+  return <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0, opacity: pulse ? 0.9 : 0.6 }} />;
+}
 
 function TimeAttack({ date, info }) {
   const [now, setNow] = useState(new Date());
@@ -738,7 +742,7 @@ function TimeAttack({ date, info }) {
   if (info.score != null) {
     return (
       <div style={{ ...styles.taBox, ...styles.taDone }}>
-        <span style={styles.taTrophy}>{info.score >= 100 ? "🏆" : info.score >= 70 ? "🥈" : info.score > 0 ? "😅" : "💤"}</span>
+        <ScoreDot score={info.score} />
         <div style={{ flex: 1 }}>
           <div style={styles.taTitle}>기록 점수 {info.score}점</div>
           {info.at && <div style={styles.taSub}>{info.at}에 처음 저장</div>}
@@ -753,7 +757,7 @@ function TimeAttack({ date, info }) {
     if (info.exists) return null; // 점수 기능 전의 예전 기록
     return (
       <div style={{ ...styles.taBox, ...styles.taZero }}>
-        <span style={styles.taTrophy}>💤</span>
+        <ScoreDot score={0} />
         <div style={{ flex: 1 }}>
           <div style={styles.taTitle}>이 날은 0점이에요</div>
           <div style={styles.taSub}>기한이 지나서 지금 써도 0점이에요. 그래도 기록은 남겨두면 좋아요.</div>
@@ -781,7 +785,7 @@ function TimeAttack({ date, info }) {
   midnight.setHours(24, 0, 0, 0);
   return (
     <div style={{ ...styles.taBox, ...(urgent ? styles.taUrgent : styles.taLive) }}>
-      <span style={styles.taTrophy}>⏱</span>
+      <ScoreDot score={score} pulse />
       <div style={{ flex: 1 }}>
         <div style={styles.taTitle}>
           지금 저장하면 <b>{score}점</b>
@@ -909,7 +913,7 @@ function Checklist({ items, checked, onToggle, onSaveList }) {
             <div key={it} style={styles.checkRow}>
               <span style={{ flex: 1, fontSize: 14.5 }}>{it}</span>
               <button style={styles.checkDel} onClick={() => onSaveList(items.filter((x) => x !== it))} aria-label={`${it} 삭제`}>
-                <X size={14} color="#DC5B45" />
+                <X size={14} color={C.brick} />
               </button>
             </div>
           ))
@@ -922,8 +926,8 @@ function Checklist({ items, checked, onToggle, onSaveList }) {
                 <div style={styles.checkGrid}>
                   {list.map((it) => (
                     <button key={it} style={{ ...styles.checkTile, ...(checked[it] ? styles.checkTileOn : {}) }} onClick={() => onToggle(it)}>
-                      <span style={{ ...styles.checkBox, ...(checked[it] ? styles.checkBoxOn : {}) }}>{checked[it] && <Check size={12} color="#fff" />}</span>
-                      <span style={styles.checkTileText}>{it}</span>
+                      <span style={{ ...styles.checkBox, ...(checked[it] ? styles.checkBoxOn : {}) }}>{checked[it] && <Check size={11} color={C.paper} />}</span>
+                      <span style={{ ...styles.checkTileText, ...(checked[it] ? styles.checkTextOn : {}) }}>{it}</span>
                     </button>
                   ))}
                 </div>
@@ -934,7 +938,7 @@ function Checklist({ items, checked, onToggle, onSaveList }) {
         <div style={styles.addRow}>
           <input style={styles.addInput} placeholder="새 항목 (예: 플랭크)" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
           <button style={styles.addBtn} onClick={add} aria-label="항목 추가">
-            <Plus size={15} color="#fff" />
+            <Plus size={15} color={C.paper} />
           </button>
         </div>
       )}
@@ -1010,13 +1014,13 @@ function EntryCard({ entry, missing, presets, onChange, onToggleTag, onSavePrese
           {t.emoji} {t.label}
         </div>
         <button style={styles.removeBtn} onClick={onRemove} aria-label={`${t.label} 카드 삭제`}>
-          <X size={15} color="#9AA3AF" />
+          <X size={15} color={C.ink2} />
         </button>
       </div>
 
       {t.score && (
         <div style={styles.scoreLine}>
-          <span style={{ ...styles.scoreLabel, ...(missing ? { color: "#DC5B45" } : {}) }}>{missing ? "점수 선택!" : "점수"}</span>
+          <span style={{ ...styles.scoreLabel, ...(missing ? { color: C.brick } : {}) }}>{missing ? "점수 선택!" : "점수"}</span>
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
@@ -1064,7 +1068,7 @@ function EntryCard({ entry, missing, presets, onChange, onToggleTag, onSavePrese
                     }}
                     aria-label={`${x} 태그 삭제`}
                   >
-                    <X size={11} color="#DC5B45" />
+                    <X size={11} color={C.brick} />
                   </button>
                 </span>
               ) : (
@@ -1083,7 +1087,7 @@ function EntryCard({ entry, missing, presets, onChange, onToggleTag, onSavePrese
               onKeyDown={(e) => e.key === "Enter" && addTag()}
             />
             <button style={styles.addBtn} onClick={addTag} aria-label="태그 추가">
-              <Plus size={15} color="#fff" />
+              <Plus size={15} color={C.paper} />
             </button>
           </div>
           <div style={styles.tagPanelFoot}>
@@ -1419,147 +1423,152 @@ function OnePage({ date, form, checklist = [], onClose }) {
 }
 
 const page = {
-  overlay: { position: "fixed", inset: 0, background: "#EEF0F4", zIndex: 80, display: "flex", flexDirection: "column" },
-  toolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px", background: "#fff", borderBottom: "1px solid #E5E9EC" },
-  toolBtn: { display: "flex", alignItems: "center", border: "none", background: "#F0F2F4", color: "#5B6470", fontSize: 13.5, fontWeight: 700, padding: "8px 12px", borderRadius: 10 },
-  toolBtnMain: { background: "#4F46E5", color: "#fff" },
-  scroll: { flex: 1, overflowY: "auto", padding: "16px 14px 40px", WebkitOverflowScrolling: "touch" },
-  sheet: { background: "#FFFFFF", borderRadius: 16, padding: "22px 20px 24px", maxWidth: 460, margin: "0 auto", boxShadow: "0 2px 10px rgba(15,23,42,0.08)", color: "#1F2937" },
-  brand: { fontSize: 11.5, fontWeight: 800, color: "#4F46E5", letterSpacing: 0.3 },
-  titleRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, paddingBottom: 14, borderBottom: "2px solid #1F2937" },
-  date: { fontSize: 20, fontWeight: 800 },
+  overlay: { position: "fixed", inset: 0, background: C.paperAlt, zIndex: 80, display: "flex", flexDirection: "column" },
+  toolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(env(safe-area-inset-top, 0px) + 10px) 16px 12px", background: C.paper, borderBottom: `1px solid ${C.line}` },
+  toolBtn: { display: "flex", alignItems: "center", border: `1px solid ${C.line}`, background: "transparent", color: C.ink, fontSize: 13.5, fontWeight: 500, padding: "8px 14px", borderRadius: 8, fontFamily: F.sans },
+  toolBtnMain: { background: C.wine, color: C.paper, border: `1px solid ${C.wine}` },
+  scroll: { flex: 1, overflowY: "auto", padding: "20px 16px 40px", WebkitOverflowScrolling: "touch" },
+  sheet: { background: C.paper, padding: "26px 24px 28px", maxWidth: 460, margin: "0 auto", color: C.ink, border: `1px solid ${C.line}` },
+  brand: { fontSize: 11.5, fontWeight: 600, color: C.ink2, letterSpacing: 1 },
+  titleRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 10, paddingBottom: 16, borderBottom: `1px solid ${C.wine}` },
+  date: { fontSize: 22, fontWeight: 700, fontFamily: F.serif },
   mood: { fontSize: 22 },
-  moodText: { fontSize: 13, fontWeight: 700, color: "#5B6470" },
-  empty: { fontSize: 13, color: "#9AA3AF", padding: "20px 0" },
-  block: { padding: "14px 0", borderBottom: "1px solid #EEF1F3" },
-  blockHead: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
-  blockTitle: { fontSize: 15, fontWeight: 800 },
-  score: { fontSize: 11, color: "#4F46E5", letterSpacing: 2 },
-  line: { fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" },
-  sub: { display: "flex", gap: 8, marginTop: 6, alignItems: "flex-start" },
-  badge: { flexShrink: 0, fontSize: 11, fontWeight: 800, padding: "3px 7px", borderRadius: 6, marginTop: 2 },
-  goodBadge: { background: "#EEF0FF", color: "#4F46E5" },
-  improveBadge: { background: "#FDF3DC", color: "#B06A00" },
-  plainBadge: { background: "#F0F2F4", color: "#5B6470" },
-  fieldName: { fontSize: 12, color: "#5B6470", marginRight: 4 },
-  tags: { fontSize: 12, color: "#4F46E5", fontWeight: 600, marginTop: 8 },
+  moodText: { fontSize: 13, fontWeight: 500, color: C.ink2 },
+  empty: { fontSize: 13, color: C.ink2, padding: "20px 0" },
+  block: { padding: "16px 0", borderBottom: `1px solid ${C.line}` },
+  blockHead: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  blockTitle: { fontSize: 15, fontWeight: 600, fontFamily: F.serif },
+  score: { fontSize: 11, color: C.wine, letterSpacing: 2 },
+  line: { fontSize: 13.5, lineHeight: 1.65, whiteSpace: "pre-wrap" },
+  sub: { display: "flex", gap: 8, marginTop: 8, alignItems: "flex-start" },
+  badge: { flexShrink: 0, fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3, marginTop: 2 },
+  goodBadge: { background: C.wineSoft, color: C.wine },
+  improveBadge: { background: C.ochreSoft, color: C.ochre },
+  plainBadge: { background: C.paperAlt, color: C.ink2 },
+  fieldName: { fontSize: 12, color: C.ink2, marginRight: 4 },
+  tags: { fontSize: 12, color: C.ink2, fontWeight: 500, marginTop: 8 },
   checkWrap: { display: "flex", flexWrap: "wrap", gap: 6 },
-  checkItem: { fontSize: 12.5, color: "#9AA3AF", border: "1px solid #EEF1F3", borderRadius: 14, padding: "3px 9px" },
-  checkItemOn: { color: "#4F46E5", background: "#EEF0FF", border: "1px solid #C7CCFF", fontWeight: 700 },
-  adviceBox: { marginTop: 16, background: "#F7F7FF", borderRadius: 12, padding: "14px 14px 10px" },
-  adviceTitle: { fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 6 },
-  adviceHead: { fontSize: 13.5, fontWeight: 800, lineHeight: 1.6, marginTop: 8 },
-  quote: { fontSize: 13.5, lineHeight: 1.6, marginTop: 12, padding: "10px 12px", background: "#fff", borderLeft: "3px solid #4F46E5", borderRadius: 6, fontStyle: "italic" },
-  adviceLine: { fontSize: 13.5, lineHeight: 1.6 },
-  planBox: { marginTop: 12, border: "1.5px solid #1F2937", borderRadius: 12, padding: "12px 14px" },
-  planTitle: { fontSize: 12.5, fontWeight: 800 },
-  planText: { fontSize: 14, fontWeight: 700, marginTop: 4, lineHeight: 1.5 },
+  checkItem: { fontSize: 12.5, color: C.ink2, border: `1px solid ${C.line}`, borderRadius: 14, padding: "3px 9px" },
+  checkItemOn: { color: C.wine, background: C.wineSoft, border: `1px solid ${C.wineLine}`, fontWeight: 600 },
+  adviceBox: { marginTop: 18, paddingTop: 16, borderTop: `1px solid ${C.line}` },
+  adviceTitle: { fontSize: 13, fontWeight: 600, color: C.wine, marginBottom: 8, fontFamily: F.serif },
+  adviceHead: { fontSize: 13.5, fontWeight: 600, lineHeight: 1.7, marginTop: 10 },
+  quote: { fontSize: 13.5, lineHeight: 1.7, marginTop: 14, padding: "2px 0 2px 14px", borderLeft: `2px solid ${C.wine}`, fontStyle: "italic", color: C.ink2 },
+  adviceLine: { fontSize: 13.5, lineHeight: 1.7 },
+  planBox: { marginTop: 16, border: `1px solid ${C.wine}`, padding: "14px 16px" },
+  planTitle: { fontSize: 12, fontWeight: 600, color: C.wine },
+  planText: { fontSize: 14, fontWeight: 500, marginTop: 5, lineHeight: 1.6 },
 };
 
 export const styles = {
-  app: { minHeight: "100vh", background: "#F7F8FA", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", color: "#1F2937" },
-  topBar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px", background: "#FFFFFF" },
+  app: { minHeight: "100vh", background: C.paper, display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", color: C.ink, fontFamily: F.sans },
+  topBar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 14px" },
   brandRow: { display: "flex", flexDirection: "column" },
-  brandName: { fontSize: 16, fontWeight: 800, color: "#4F46E5", letterSpacing: 0.3 },
-  brandSub: { fontSize: 11, color: "#9AA3AF", fontWeight: 600, marginTop: 1 },
-  viewToggle: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 3, gap: 2 },
-  viewBtn: { display: "flex", alignItems: "center", border: "none", background: "transparent", color: "#8A93A0", fontSize: 13, fontWeight: 700, padding: "7px 12px", borderRadius: 8 },
-  viewBtnOn: { background: "#FFFFFF", color: "#4F46E5", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
-  header: { padding: "6px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
+  brandName: { fontSize: 18, fontWeight: 700, color: C.ink, fontFamily: F.serif },
+  brandSub: { fontSize: 11, color: C.ink2, fontWeight: 500, marginTop: 2 },
+  viewToggle: { display: "flex", gap: 14 },
+  viewBtn: { display: "flex", alignItems: "center", border: "none", borderBottom: "2px solid transparent", background: "transparent", color: C.ink2, fontSize: 13, fontWeight: 500, padding: "6px 2px", fontFamily: F.sans },
+  viewBtnOn: { color: C.wine, borderBottomColor: C.wine },
+  header: { padding: "0 20px 16px", borderBottom: `1px solid ${C.line}` },
   dateNavRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
-  navBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  dateWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
-  dateBig: { position: "relative", fontSize: 18, fontWeight: 700, color: "#1F2937" },
-  todayBtn: { background: "#EEF0FF", border: "none", borderRadius: 20, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, color: "#4F46E5" },
-  moodRow: { display: "flex", justifyContent: "center", gap: 8, marginTop: 14 },
-  moodCol: { background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: 0 },
-  moodBtn: { fontSize: 22, background: "#F0F2F4", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" },
-  moodBtnActive: { background: "#EEF0FF", boxShadow: "0 0 0 2px #4F46E5 inset" },
-  moodLabel: { fontSize: 11, color: "#9AA3AF", fontWeight: 600 },
-  body: { flex: 1, padding: "14px 16px 60px" },
+  navBtn: { background: "none", border: "none", color: C.ink2, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  dateWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 5 },
+  dateBig: { position: "relative", fontSize: 19, fontWeight: 700, color: C.ink, fontFamily: F.serif },
+  todayBtn: { background: "none", border: `1px solid ${C.wineLine}`, borderRadius: 20, padding: "3px 11px", fontSize: 11.5, fontWeight: 500, color: C.wine, fontFamily: F.sans },
+  moodRow: { display: "flex", justifyContent: "center", gap: 22, marginTop: 16 },
+  moodCol: { background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: 0 },
+  moodBtn: { fontSize: 22, opacity: 0.45, transition: "opacity .15s" },
+  moodBtnActive: { opacity: 1 },
+  moodLabel: { fontSize: 10.5, color: C.ink2, fontWeight: 500 },
+  body: { flex: 1, padding: "0 20px 60px" },
   loadingWrap: { display: "flex", justifyContent: "center", padding: "60px 0" },
-  taBox: { display: "flex", alignItems: "center", gap: 10, borderRadius: 14, padding: "11px 14px", marginBottom: 10 },
-  taLive: { background: "#EEF0FF", color: "#1F2937" },
-  taUrgent: { background: "#DC5B45", color: "#fff" },
-  taDone: { background: "#FFFFFF", color: "#1F2937", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
-  taZero: { background: "#F3F4F6", color: "#5B6470" },
-  taTrophy: { fontSize: 22 },
-  taTitle: { fontSize: 14.5, fontWeight: 700 },
-  taSub: { fontSize: 12, opacity: 0.8, marginTop: 2, fontVariantNumeric: "tabular-nums" },
-  historyScore: { fontSize: 11.5, fontWeight: 800, padding: "2px 8px", borderRadius: 10 },
-  planCheck: { background: "#1F2937", color: "#fff", borderRadius: 14, padding: "12px 14px", marginBottom: 10 },
-  planCheckLabel: { fontSize: 12, fontWeight: 700, color: "#C7CCFF" },
-  planCheckText: { fontSize: 14.5, fontWeight: 700, marginTop: 4, lineHeight: 1.45 },
+  taBox: { display: "flex", alignItems: "center", gap: 10, padding: "14px 0", borderBottom: `1px solid ${C.line}` },
+  taLive: {},
+  taUrgent: { color: C.brick },
+  taDone: {},
+  taZero: { color: C.ink2 },
+  taTrophy: { fontSize: 17, width: 20, textAlign: "center", flexShrink: 0 },
+  taTitle: { fontSize: 13.5, fontWeight: 500 },
+  taSub: { fontSize: 11.5, color: C.ink2, marginTop: 1, fontVariantNumeric: "tabular-nums" },
+  historyScore: { fontSize: 11, fontWeight: 500, color: C.ink2 },
+  planCheck: { padding: "14px 0", borderBottom: `1px solid ${C.line}` },
+  planCheckLabel: { fontSize: 12, fontWeight: 500, color: C.wine },
+  planCheckText: { fontSize: 14.5, fontWeight: 500, marginTop: 4, lineHeight: 1.5, fontFamily: F.serif },
   planCheckBtns: { display: "flex", gap: 8, marginTop: 10 },
-  planBtn: { flex: 1, border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#fff", fontSize: 13.5, fontWeight: 700, padding: "9px 0", borderRadius: 10 },
-  planBtnYes: { background: "#4F46E5", border: "1px solid #4F46E5" },
-  planBtnNo: { background: "#6B7280", border: "1px solid #6B7280" },
-  section: { background: "#FFFFFF", borderRadius: 14, padding: "12px 14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 10 },
-  sectionMissing: { boxShadow: "0 0 0 1.5px #F2B8AE inset, 0 1px 3px rgba(15,23,42,0.06)" },
-  sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  cardTitle: { fontSize: 15, fontWeight: 800, color: "#1F2937" },
+  planBtn: { ...shared.btnSecondary, flex: 1, fontSize: 13 },
+  planBtnYes: { background: C.wine, color: C.paper, border: `1px solid ${C.wine}` },
+  planBtnNo: { background: C.paperAlt, border: `1px solid ${C.paperAlt}`, color: C.ink2 },
+  section: { ...shared.section },
+  sectionMissing: { borderLeft: `2px solid ${C.brick}`, paddingLeft: 12, marginLeft: -14 },
+  sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  cardTitle: { fontSize: 15.5, fontWeight: 600, color: C.ink, fontFamily: F.serif },
   dateInput: { position: "absolute", inset: 0, opacity: 0, width: "100%", height: "100%", border: "none" },
-  addTypeRow: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 },
-  addTypeBtn: { display: "inline-flex", alignItems: "center", border: "1px dashed #C7CCFF", background: "#fff", color: "#4F46E5", fontSize: 13, fontWeight: 700, padding: "8px 11px", borderRadius: 20 },
-  removeBtn: { background: "none", border: "none", padding: 4, display: "flex" },
-  scoreLine: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 },
-  fieldBlock: { marginTop: 6 },
-  fieldLabel: { fontSize: 12, fontWeight: 800, color: "#5B6470", marginBottom: 4 },
-  tagBar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 8 },
-  tagToggle: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "5px 10px", fontSize: 12, fontWeight: 700, color: "#5B6470", marginLeft: "auto" },
-  tagPanel: { marginTop: 8, paddingTop: 6, borderTop: "1px dashed #E5E9EC" },
-  tagPanelFoot: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
-  linkBtn: { border: "none", background: "none", color: "#9AA3AF", fontSize: 12, fontWeight: 700, textDecoration: "underline", padding: 0 },
-  tagDoneSmall: { display: "inline-flex", alignItems: "center", border: "none", background: "#4F46E5", color: "#fff", fontSize: 12.5, fontWeight: 700, padding: "7px 12px", borderRadius: 10 },
-  scoreRow: { display: "flex", alignItems: "center", gap: 4 },
-  scoreLabel: { fontSize: 11, color: "#9AA3AF", fontWeight: 700, marginRight: 2 },
-  scoreBtn: { width: 26, height: 26, borderRadius: "50%", border: "1px solid #E5E9EC", background: "#fff", color: "#9AA3AF", fontSize: 12, fontWeight: 700, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" },
-  scoreBtnOn: { background: "#4F46E5", border: "1px solid #4F46E5", color: "#fff" },
-  autoInput: { width: "100%", boxSizing: "border-box", border: "1px solid #EEF1F3", borderRadius: 10, padding: "8px 10px", outline: "none", fontSize: 16, color: "#1F2937", background: "#FAFBFC", resize: "none", fontFamily: "inherit", lineHeight: 1.45, overflow: "hidden" },
-  lineRow: { display: "flex", alignItems: "flex-start", gap: 8, marginTop: 6 },
-  lineBadge: { flexShrink: 0, width: 62, textAlign: "center", fontSize: 11.5, fontWeight: 800, padding: "10px 0", borderRadius: 8 },
-  goodBadge: { background: "#EEF0FF", color: "#4F46E5" },
-  improveBadge: { background: "#FDF3DC", color: "#B06A00" },
+  addTypeRow: { display: "flex", flexWrap: "wrap", gap: 8, padding: "16px 0", borderTop: `1px solid ${C.line}` },
+  addTypeBtn: { ...shared.chip, display: "inline-flex", alignItems: "center" },
+  removeBtn: { background: "none", border: "none", padding: 4, display: "flex", color: C.ink2 },
+  scoreLine: { display: "flex", alignItems: "center", gap: 6, marginBottom: 10 },
+  fieldBlock: { marginTop: 10 },
+  fieldLabel: { fontSize: 12, fontWeight: 500, color: C.ink2, marginBottom: 5 },
+  tagBar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 10 },
+  tagToggle: { ...shared.btnGhost, marginLeft: "auto" },
+  tagPanel: { marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` },
+  tagPanelFoot: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
+  linkBtn: { border: "none", background: "none", color: C.ink2, fontSize: 12, fontWeight: 500, textDecoration: "underline", padding: 0, fontFamily: F.sans },
+  tagDoneSmall: { display: "inline-flex", alignItems: "center", border: "none", background: C.wine, color: C.paper, fontSize: 12.5, fontWeight: 500, padding: "7px 13px", borderRadius: 8, fontFamily: F.sans },
+  scoreRow: { display: "flex", alignItems: "center", gap: 5 },
+  scoreLabel: { fontSize: 11, color: C.ink2, fontWeight: 500, marginRight: 2 },
+  scoreBtn: { width: 24, height: 24, borderRadius: "50%", border: `1px solid ${C.line}`, background: "transparent", color: C.ink2, fontSize: 11.5, fontWeight: 500, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: F.sans },
+  scoreBtnOn: { background: C.wine, border: `1px solid ${C.wine}`, color: C.paper },
+  autoInput: { ...shared.textarea, padding: "8px 0", border: "none", borderBottom: `1px solid ${C.line}`, borderRadius: 0, background: "transparent", overflow: "hidden" },
+  lineRow: { display: "flex", alignItems: "flex-start", gap: 10, marginTop: 10 },
+  lineBadge: { flexShrink: 0, width: 58, fontSize: 11.5, fontWeight: 500, paddingTop: 8 },
+  goodBadge: { color: C.wine },
+  improveBadge: { color: C.ochre },
   lineInput: { flex: 1, width: "auto", minWidth: 0 },
   chipWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  tagMini: { fontSize: 12, color: "#4F46E5", fontWeight: 600 },
-  checkCount: { fontSize: 12.5, color: "#4F46E5", fontWeight: 800, marginLeft: 4 },
-  editBtn: { border: "none", background: "#F0F2F4", color: "#5B6470", fontSize: 12, fontWeight: 700, padding: "5px 10px", borderRadius: 14 },
-  checkRow: { width: "100%", display: "flex", alignItems: "center", gap: 10, border: "none", background: "none", padding: "9px 2px", borderTop: "1px solid #F3F4F6", textAlign: "left" },
-  checkBox: { width: 18, height: 18, borderRadius: 6, border: "2px solid #D7DCE1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  checkBoxOn: { background: "#4F46E5", border: "2px solid #4F46E5" },
-  checkGroup: { marginTop: 8 },
-  checkGroupLabel: { fontSize: 11.5, fontWeight: 800, color: "#9AA3AF", marginBottom: 5 },
-  checkGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 },
-  checkTile: { display: "flex", alignItems: "center", gap: 7, border: "1px solid #EEF1F3", background: "#FAFBFC", borderRadius: 10, padding: "9px 8px", textAlign: "left", minWidth: 0 },
-  checkTileOn: { border: "1px solid #C7CCFF", background: "#EEF0FF" },
-  checkTileText: { fontSize: 13, color: "#1F2937", fontWeight: 600, lineHeight: 1.3, wordBreak: "keep-all" },
-  checkText: { fontSize: 14.5, color: "#1F2937" },
-  checkTextOn: { color: "#9AA3AF", textDecoration: "line-through" },
-  checkDel: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
-  tagMainBtn: { width: "100%", display: "flex", alignItems: "center", border: "none", background: "none", padding: "4px 0", fontSize: 14.5, fontWeight: 800, color: "#1F2937" },
-  tagGroup: { paddingTop: 10, marginTop: 6, borderTop: "1px solid #F1F3F5" },
-  tagGroupLabel: { fontSize: 12, fontWeight: 800, color: "#5B6470" },
-  tagChip: { border: "1px solid #E5E9EC", background: "#fff", color: "#8A93A0", fontSize: 13, fontWeight: 600, padding: "6px 11px", borderRadius: 20 },
-  tagChipOn: { background: "#EEF0FF", border: "1px solid #C7CCFF", color: "#4F46E5" },
-  tagAdd: { display: "inline-flex", alignItems: "center", border: "1px dashed #D7DCE1", background: "#fff", color: "#8A93A0", fontSize: 12.5, fontWeight: 700, padding: "6px 10px", borderRadius: 20 },
-  tagDoneBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginTop: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 13.5, fontWeight: 700, padding: "10px 0", borderRadius: 10 },
-  saveBtn: { width: "100%", border: "none", background: "#4F46E5", color: "#fff", fontWeight: 700, fontSize: 14.5, padding: "13px 0", borderRadius: 12, marginTop: 6, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center" },
-  pinBox: { boxShadow: "0 0 0 1.5px #C7CCFF inset, 0 1px 3px rgba(15,23,42,0.06)" },
-  pinHead: { width: "100%", display: "flex", alignItems: "center", gap: 6, border: "none", background: "none", padding: "2px 0 8px", textAlign: "left" },
-  pinSub: { fontSize: 11.5, color: "#9AA3AF", fontWeight: 600 },
-  claudeBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "#1F2937", color: "#fff", fontSize: 14, fontWeight: 700, padding: "11px 0", borderRadius: 10, marginTop: 8 },
-  adviceHint: { fontSize: 12, color: "#8A93A0", margin: "8px 0", lineHeight: 1.5 },
-  aboutToggle: { width: "100%", display: "flex", alignItems: "center", border: "1px solid #EEF1F3", background: "#FAFBFC", borderRadius: 10, padding: "9px 10px", fontSize: 13, fontWeight: 800, color: "#1F2937", marginBottom: 8 },
-  aboutToggleSub: { fontSize: 11.5, fontWeight: 600, color: "#9AA3AF", marginLeft: 4 },
-  planLabel: { fontSize: 12.5, fontWeight: 800, color: "#1F2937", margin: "10px 0 4px" },
-  adviceSaveBtn: { width: "100%", border: "1px solid #C7CCFF", background: "#EEF0FF", color: "#4F46E5", fontSize: 13.5, fontWeight: 700, padding: "10px 0", borderRadius: 10, marginTop: 8 },
-  pageBtn: { width: "100%", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #E5E9EC", background: "#fff", color: "#1F2937", fontSize: 14, fontWeight: 700, padding: "12px 0", borderRadius: 12, marginBottom: 22 },
-  toast: { position: "fixed", left: "50%", bottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)", transform: "translateX(-50%)", background: "rgba(31,41,55,0.92)", color: "#fff", fontSize: 13, fontWeight: 600, padding: "10px 16px", borderRadius: 20, zIndex: 90, whiteSpace: "nowrap" },
-  historyLabel: { fontSize: 12.5, color: "#8A93A0", fontWeight: 700, marginBottom: 8 },
-  historyRow: { width: "100%", display: "flex", alignItems: "center", gap: 8, background: "#FFFFFF", border: "none", borderRadius: 10, padding: "9px 12px", marginBottom: 6, boxShadow: "0 1px 2px rgba(15,23,42,0.05)" },
-  historyRowActive: { boxShadow: "0 0 0 1.5px #4F46E5 inset" },
+  tagMini: { fontSize: 11.5, color: C.ink2, fontWeight: 500 },
+  checkCount: { fontSize: 12.5, color: C.ink2, fontWeight: 500, marginLeft: 4 },
+  editBtn: { ...shared.btnGhost, textDecoration: "underline" },
+  checkRow: { width: "100%", display: "flex", alignItems: "center", gap: 10, border: "none", background: "none", padding: "8px 0", textAlign: "left" },
+  checkBox: { width: 17, height: 17, borderRadius: 4, border: `1.5px solid ${C.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  checkBoxOn: { background: C.wine, border: `1.5px solid ${C.wine}` },
+  checkGroup: { marginTop: 4 },
+  checkGroupLabel: { fontSize: 11, fontWeight: 500, color: C.ink2, marginBottom: 2, marginTop: 8 },
+  checkGrid: { display: "flex", flexDirection: "column" },
+  checkTile: { display: "flex", alignItems: "center", gap: 9, border: "none", background: "none", padding: "7px 0", textAlign: "left", minWidth: 0 },
+  checkTileOn: {},
+  checkTileText: { fontSize: 13.5, color: C.ink, fontWeight: 400, lineHeight: 1.3, wordBreak: "keep-all" },
+  checkText: { fontSize: 14.5, color: C.ink },
+  checkTextOn: { color: C.ink2, textDecoration: "line-through" },
+  checkDel: { background: "none", border: "none", borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
+  tagMainBtn: { width: "100%", display: "flex", alignItems: "center", border: "none", background: "none", padding: "2px 0", fontSize: 14.5, fontWeight: 500, color: C.ink, fontFamily: F.serif },
+  tagGroup: { paddingTop: 12, marginTop: 8, borderTop: `1px solid ${C.line}` },
+  tagGroupLabel: { fontSize: 11.5, fontWeight: 500, color: C.ink2 },
+  tagChip: { ...shared.chip },
+  tagChipOn: { ...shared.chipOn },
+  tagAdd: { display: "inline-flex", alignItems: "center", border: `1px dashed ${C.line}`, background: "none", color: C.ink2, fontSize: 12.5, fontWeight: 500, padding: "6px 11px", borderRadius: 20, fontFamily: F.sans },
+  tagDoneBtn: { ...shared.btnPrimary, marginTop: 12 },
+  saveBtn: { ...shared.btnPrimary, marginTop: 18, marginBottom: 14 },
+  pinBox: {},
+  pinHead: { width: "100%", display: "flex", alignItems: "baseline", gap: 8, border: "none", background: "none", padding: 0, textAlign: "left" },
+  pinSub: { fontSize: 11.5, color: C.ink2, fontWeight: 500 },
+  claudeBtn: { ...shared.btnSecondary, marginTop: 10 },
+  adviceHint: { fontSize: 12, color: C.ink2, margin: "10px 0", lineHeight: 1.55 },
+  aboutToggle: { width: "100%", display: "flex", alignItems: "center", border: "none", background: "none", padding: "4px 0 10px", fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 4, fontFamily: F.sans },
+  aboutToggleSub: { fontSize: 11.5, fontWeight: 500, color: C.ink2, marginLeft: 4 },
+  planLabel: { fontSize: 12.5, fontWeight: 500, color: C.ink, margin: "12px 0 5px" },
+  adviceSaveBtn: { ...shared.btnPrimary, marginTop: 10 },
+  pageBtn: { ...shared.btnSecondary, marginTop: 18, marginBottom: 30 },
+  toast: { ...shared.toast },
+  historyLabel: { fontSize: 12, color: C.ink2, fontWeight: 500, margin: "18px 0 10px" },
+  historyRow: { width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: "9px 0", borderBottom: `1px solid ${C.line}`, textAlign: "left" },
+  historyRowActive: { color: C.wine },
   historyMood: { fontSize: 15 },
-  historyDate: { fontSize: 13, color: "#5B6470", fontWeight: 600, flex: 1, textAlign: "left" },
-  historyBadge: { fontSize: 11.5, color: "#4F46E5", fontWeight: 700, background: "#EEF0FF", padding: "2px 8px", borderRadius: 10 },
+  historyDate: { fontSize: 13, color: "inherit", fontWeight: 400, flex: 1, textAlign: "left" },
+  historyBadge: { fontSize: 11, color: C.ink2, fontWeight: 500 },
+  addRow: { display: "flex", gap: 8, marginTop: 10 },
+  addInput: { ...shared.input, flex: 1, minWidth: 0, borderRadius: 8 },
+  addBtn: { background: C.wine, border: "none", borderRadius: 8, width: 38, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  chipEditing: { display: "inline-flex", alignItems: "center", gap: 5, border: `1px dashed ${C.line}`, background: "none", color: C.ink2, fontSize: 13, fontWeight: 500, padding: "6px 6px 6px 12px", borderRadius: 20, fontFamily: F.sans },
+  chipRemove: { background: "none", border: "none", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
 };
