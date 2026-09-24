@@ -1,5 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/powerlog", "destination": "/powerlog.html" }
-  ]
-}
