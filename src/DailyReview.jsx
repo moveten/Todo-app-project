@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Check, Loader2, Hash, PenLine, BarChart3, Sparkles, FileText, X, Download, Plus, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 import Stats from "./Stats.jsx";
+import Notes from "./Notes.jsx";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -147,9 +148,12 @@ export default function DailyReview() {
             <BarChart3 size={13} style={{ marginRight: 4 }} />
             통계
           </button>
+          <button style={{ ...styles.viewBtn, ...(view === "notes" ? styles.viewBtnOn : {}) }} onClick={() => setView("notes")}>
+            📚
+          </button>
         </div>
       </div>
-      {view === "record" ? <RecordView /> : <Stats />}
+      {view === "record" ? <RecordView /> : view === "stats" ? <Stats /> : <Notes />}
     </div>
   );
 }
