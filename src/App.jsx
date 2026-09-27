@@ -1111,49 +1111,39 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
     if (next > RIGHT_OPEN) next = RIGHT_OPEN + (next - RIGHT_OPEN) * 0.2;
     setX(next);
   };
+  // 스와이프로 살짝 밀린 상태에서 그 위에 뜬 작은 버튼을 다시 탭해야 하는 방식이 기기에 따라
+  // 눌리지 않는 문제가 반복돼서, 충분히 밀면(release 시점에) 그 즉시 확실한 동작으로 처리하고
+  // 카드는 바로 원위치로 돌아가게 바꿈 (더 이상 뭔가를 추가로 다시 눌러야 할 필요가 없음)
   const onTouchEnd = () => {
     dragRef.current.dragging = false;
-    if (dragRef.current.lockDir === "v") return; // 스크롤로 판정된 제스처는 스냅도 하지 않음
-    if (x <= LEFT_OPEN / 2) setX(LEFT_OPEN);
-    else if (x >= RIGHT_OPEN / 2) setX(RIGHT_OPEN);
-    else setX(0);
+    const wasVertical = dragRef.current.lockDir === "v";
+    const finalX = x;
+    setX(0);
+    if (wasVertical) return;
+    if (finalX <= LEFT_OPEN / 2) {
+      setActionSheetKind("edit-delete");
+    } else if (finalX >= RIGHT_OPEN / 2) {
+      onPin();
+    }
   };
-  const close = () => setX(0);
+  const [actionSheetKind, setActionSheetKind] = useState(null); // null | "edit-delete"
 
   return (
     <div style={styles.swipeWrap}>
       <div style={styles.swipeRightActions}>
-        <button
-          onClick={() => {
-            onEdit();
-            close();
-          }}
-          style={{ ...styles.swipeActionBtn, background: "#0D9488" }}
-        >
+        <div style={{ ...styles.swipeActionBtn, background: "#0D9488" }}>
           <Pencil size={16} />
           수정
-        </button>
-        <button
-          onClick={() => {
-            onDelete();
-            close();
-          }}
-          style={{ ...styles.swipeActionBtn, background: "#DC5B45" }}
-        >
+        </div>
+        <div style={{ ...styles.swipeActionBtn, background: "#DC5B45" }}>
           <Trash2 size={16} />
           삭제
-        </button>
+        </div>
       </div>
       <div style={styles.swipeLeftActions}>
-        <button
-          onClick={() => {
-            onPin();
-            close();
-          }}
-          style={styles.swipePinBtn}
-        >
+        <div style={styles.swipePinBtn}>
           <Pin size={18} color={pinned ? "#0D9488" : "#5B6470"} />
-        </button>
+        </div>
       </div>
       <div
         onTouchStart={onTouchStart}
@@ -1173,6 +1163,35 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
       >
         {children}
       </div>
+      {actionSheetKind === "edit-delete" && (
+        <div style={styles.choiceOverlay} onClick={() => setActionSheetKind(null)}>
+          <div style={styles.choiceSheet} onClick={(e) => e.stopPropagation()}>
+            <button
+              style={styles.choiceBtnDone}
+              onClick={() => {
+                setActionSheetKind(null);
+                onEdit();
+              }}
+            >
+              <Pencil size={16} style={{ marginRight: 6 }} />
+              수정
+            </button>
+            <button
+              style={styles.choiceBtnDelete}
+              onClick={() => {
+                setActionSheetKind(null);
+                onDelete();
+              }}
+            >
+              <Trash2 size={16} style={{ marginRight: 6 }} />
+              삭제
+            </button>
+            <button style={styles.choiceCancelBtn} onClick={() => setActionSheetKind(null)}>
+              취소
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2258,8 +2277,9 @@ const styles = {
   choiceOverlay: { position: "fixed", inset: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "flex-end", zIndex: 60 },
   choiceSheet: { width: "100%", background: "#fff", borderRadius: "20px 20px 0 0", padding: "22px 18px calc(22px + env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", gap: 10 },
   choiceTitle: { fontSize: 15, fontWeight: 700, color: "#1F2937", textAlign: "center", marginBottom: 6 },
-  choiceBtnDone: { background: "#0D9488", color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
+  choiceBtnDone: { display: "flex", alignItems: "center", justifyContent: "center", background: "#0D9488", color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
   choiceBtnReady: { background: "#DDF3E1", color: "#16A34A", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
+  choiceBtnDelete: { display: "flex", alignItems: "center", justifyContent: "center", background: "#FBEAE7", color: "#DC5B45", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
   choiceCancelBtn: { background: "#F0F2F4", color: "#5B6470", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 14.5, fontWeight: 600, marginTop: 2 },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
   registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
