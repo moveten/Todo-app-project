@@ -1130,21 +1130,6 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
 
   return (
     <div style={styles.swipeWrap}>
-      <div style={styles.swipeRightActions}>
-        <div style={{ ...styles.swipeActionBtn, background: "#0D9488" }}>
-          <Pencil size={16} />
-          수정
-        </div>
-        <div style={{ ...styles.swipeActionBtn, background: "#DC5B45" }}>
-          <Trash2 size={16} />
-          삭제
-        </div>
-      </div>
-      <div style={styles.swipeLeftActions}>
-        <div style={styles.swipePinBtn}>
-          <Pin size={18} color={pinned ? "#0D9488" : "#5B6470"} />
-        </div>
-      </div>
       <div
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
