@@ -326,7 +326,7 @@ function buildTodos(items, today) {
   return todos;
 }
 
-export default function App() {
+function AppInner() {
   const [items, setItems] = useState(null);
   const [presets, setPresets] = useState(null);
   const [view, setView] = useState("list"); // list | calendar
@@ -2323,3 +2323,79 @@ const styles = {
   pageFooterSticky: { position: "sticky", bottom: 0, background: "#F7F8FA", paddingTop: 14, paddingBottom: 4, marginTop: 18 },
   doneBtn: { background: "#0D9488", color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 14.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" },
 };
+
+// ---------- 로그인 게이트 (비밀번호 하나로 잠금) ----------
+const APP_PASSWORD = "1114!";
+const AUTH_KEY = "app_auth"; // localStorage: 로그인 유지
+const AUTH_SESSION_KEY = "app_auth_session"; // sessionStorage: 이번 방문만
+
+function LoginGate() {
+  const [unlocked, setUnlocked] = useState(() => {
+    try {
+      return localStorage.getItem(AUTH_KEY) === "true" || sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [pw, setPw] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (pw === APP_PASSWORD) {
+      try {
+        if (remember) localStorage.setItem(AUTH_KEY, "true");
+        else sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+      } catch {
+        // storage 접근 불가해도 이번 세션 내에서는 잠금 해제된 채로 둠
+      }
+      setUnlocked(true);
+    } else {
+      setError(true);
+      setPw("");
+    }
+  };
+
+  if (unlocked) return <AppInner />;
+
+  return (
+    <div style={loginStyles.wrap}>
+      <form onSubmit={handleSubmit} style={loginStyles.card}>
+        <div style={loginStyles.title}>비밀번호를 입력하세요</div>
+        <input
+          type="password"
+          inputMode="text"
+          autoFocus
+          value={pw}
+          onChange={(e) => {
+            setPw(e.target.value);
+            setError(false);
+          }}
+          style={{ ...loginStyles.input, borderColor: error ? "#DC5B45" : "#DDE2E7" }}
+          placeholder="비밀번호"
+        />
+        {error && <div style={loginStyles.errorText}>비밀번호가 올바르지 않아요.</div>}
+        <label style={loginStyles.rememberRow}>
+          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+          로그인 상태 유지
+        </label>
+        <button type="submit" style={loginStyles.button}>
+          확인
+        </button>
+      </form>
+    </div>
+  );
+}
+
+const loginStyles = {
+  wrap: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F5F6F8", padding: 24 },
+  card: { width: "100%", maxWidth: 320, background: "#fff", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", gap: 14 },
+  title: { fontSize: 15, fontWeight: 600, color: "#1F2933", textAlign: "center", marginBottom: 4 },
+  input: { width: "100%", padding: "12px 14px", fontSize: 15, borderRadius: 10, border: "1px solid #DDE2E7", outline: "none" },
+  errorText: { fontSize: 12, color: "#DC5B45", marginTop: -6 },
+  rememberRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#5B6470" },
+  button: { marginTop: 4, padding: "12px 0", borderRadius: 10, border: "none", background: "#0D9488", color: "#fff", fontSize: 15, fontWeight: 600 },
+};
+
+export default LoginGate;
