@@ -914,6 +914,17 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
                   <RotateCcw size={12} style={{ marginRight: 4 }} />
                   복귀
                 </button>
+              ) : t.ready ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    t.kind === "main" ? onToggleMainReady(t.itemId, false) : onToggleReminderReady(t.itemId, t.reminderId, false);
+                  }}
+                  style={styles.restoreBtn}
+                >
+                  <RotateCcw size={12} style={{ marginRight: 4 }} />
+                  복귀
+                </button>
               ) : (
                 <span style={{ ...styles.ddayText, color: isPastOrToday ? "#DC5B45" : "#16A34A" }}>{dday}</span>
               )}
