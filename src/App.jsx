@@ -815,6 +815,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
     setDragY(0);
   };
   const startLongPress = (key, clientX, clientY) => {
+    clearTimeout(dragInfo.current.timer);
     dragInfo.current.key = key;
     dragInfo.current.startX = clientX;
     dragInfo.current.startY = clientY;
@@ -1016,7 +1017,11 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
           <div
             key={key}
             ref={(el) => (rowRefs.current[key] = el)}
-            onTouchStart={(e) => startLongPress(key, e.touches[0].clientX, e.touches[0].clientY)}
+            onTouchStart={(e) => {
+              // 버튼(체크박스/수정/삭제/고정 등) 위에서 시작한 터치는 드래그 정렬을 아예 시작하지 않음
+              if (e.target.closest && e.target.closest("button")) return;
+              startLongPress(key, e.touches[0].clientX, e.touches[0].clientY);
+            }}
             style={{
               transform: isDragging ? `translateY(${dragY}px) scale(1.02)` : "none",
               position: isDragging ? "relative" : "static",
