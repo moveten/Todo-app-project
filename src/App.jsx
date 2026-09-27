@@ -242,6 +242,7 @@ const PRESET_KEY = "moved-app:presets";
 const PRESET_BACKUP_KEY = "moved-app:presets:backup";
 const LAST_BACKUP_KEY = "moved-app:last-backup-at";
 const ORDER_KEY = "moved-app:manual-order";
+const ROUTINE_KEY = "moved-app:daily-routine";
 const BACKUP_REMINDER_DAYS = 7;
 
 // ---------- 오늘 기준 할 일 목록 계산 ----------
@@ -336,6 +337,7 @@ function AppInner() {
   const [loadWarning, setLoadWarning] = useState(false);
   const [lastBackupAt, setLastBackupAt] = useState(null);
   const [manualOrder, setManualOrderState] = useState([]);
+  const [routine, setRoutineState] = useState({ date: todayISO(), rule: false, grip: false });
   const [toast, setToast] = useState(null); // null | { text: string, key: number }
   const toastTimerRef = useRef(null);
   const itemsRef = useRef(null);
@@ -418,12 +420,37 @@ function AppInner() {
       } catch (e) {
         setManualOrderState([]);
       }
+
+      try {
+        const res5 = await storage.get(ROUTINE_KEY);
+        const parsedRoutine = res5 ? JSON.parse(res5.value) : null;
+        const t = todayISO();
+        if (parsedRoutine && parsedRoutine.date === t) {
+          setRoutineState(parsedRoutine);
+        } else {
+          setRoutineState({ date: t, rule: false, grip: false });
+        }
+      } catch (e) {
+        setRoutineState({ date: todayISO(), rule: false, grip: false });
+      }
     })();
   }, []);
 
   const setManualOrder = (orderKeys) => {
     setManualOrderState(orderKeys);
     storage.set(ORDER_KEY, JSON.stringify(orderKeys)).catch(() => {});
+  };
+
+  const toggleRoutine = (key) => {
+    const t = todayISO();
+    const base = routine.date === t ? routine : { date: t, rule: false, grip: false };
+    const next = { ...base, [key]: !base[key] };
+    setRoutineState(next);
+    storage.set(ROUTINE_KEY, JSON.stringify(next)).catch(() => {});
+  };
+
+  const handleRoutineComplete = () => {
+    showToast("오늘 루틴 완료! 🎉");
   };
 
   const persist = async (next) => {
@@ -555,6 +582,7 @@ function AppInner() {
   const today = todayISO();
   const todos = buildTodos(items, today);
   const activeCount = todos.filter((t) => !t.done).length;
+  const todayRoutine = routine.date === today ? routine : { date: today, rule: false, grip: false };
   const upcomingItems = items
     .filter((it) => !it.recurring && it.date > today)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -635,7 +663,32 @@ function AppInner() {
             <div>
               <div style={styles.dateBig}>{fmtFullWithYear(today)}</div>
               {view === "list" ? (
-                <span style={styles.countBadge}>할 일 {activeCount}건</span>
+                <div style={styles.countRoutineRow}>
+                  <span style={styles.countBadge}>할 일 {activeCount}건</span>
+                  <button
+                    onClick={() => toggleRoutine("rule")}
+                    style={{ ...styles.routineChip, ...(todayRoutine.rule ? styles.routineChipActive : {}) }}
+                  >
+                    <span style={{ ...styles.routineCheckbox, ...(todayRoutine.rule ? styles.routineCheckboxActive : {}) }}>
+                      {todayRoutine.rule && <Check size={10} color="#fff" strokeWidth={3} />}
+                    </span>
+                    규정공부
+                  </button>
+                  <button
+                    onClick={() => toggleRoutine("grip")}
+                    style={{ ...styles.routineChip, ...(todayRoutine.grip ? styles.routineChipActive : {}) }}
+                  >
+                    <span style={{ ...styles.routineCheckbox, ...(todayRoutine.grip ? styles.routineCheckboxActive : {}) }}>
+                      {todayRoutine.grip && <Check size={10} color="#fff" strokeWidth={3} />}
+                    </span>
+                    악력기
+                  </button>
+                  {todayRoutine.rule && todayRoutine.grip && (
+                    <button onClick={handleRoutineComplete} style={styles.routineDoneBtn}>
+                      완료
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div style={styles.subLabel}>달력</div>
               )}
@@ -2178,7 +2231,13 @@ const styles = {
   headerBackupDot: { position: "absolute", top: 4, right: 5, width: 8, height: 8, borderRadius: "50%", background: "#DC5B45", border: "1.5px solid #fff" },
   dateBig: { fontSize: 21, fontWeight: 700, color: "#1F2937" },
   subLabel: { fontSize: 12.5, color: "#8A93A0", marginTop: 3, marginBottom: 16 },
-  countBadge: { display: "inline-block", marginTop: 6, marginBottom: 16, background: "#EAF6F4", color: "#0D9488", fontSize: 13, fontWeight: 700, padding: "5px 12px", borderRadius: 20 },
+  countBadge: { display: "inline-block", background: "#EAF6F4", color: "#0D9488", fontSize: 13, fontWeight: 700, padding: "5px 12px", borderRadius: 20 },
+  countRoutineRow: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 6, marginBottom: 16 },
+  routineChip: { display: "flex", alignItems: "center", gap: 5, background: "#F0F2F4", border: "none", borderRadius: 20, padding: "5px 10px 5px 6px", fontSize: 12.5, fontWeight: 600, color: "#5B6470" },
+  routineChipActive: { background: "#EAF6F4", color: "#0D9488" },
+  routineCheckbox: { width: 15, height: 15, borderRadius: "50%", border: "1.5px solid #C7CDD3", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  routineCheckboxActive: { background: "#0D9488", border: "1.5px solid #0D9488" },
+  routineDoneBtn: { background: "#0D9488", color: "#fff", border: "none", borderRadius: 20, padding: "5px 14px", fontSize: 12.5, fontWeight: 700 },
   tabRow: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 3, gap: 2, marginBottom: 0 },
   tabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 0", borderRadius: 8, border: "none", background: "transparent", color: "#8A93A0", fontSize: 13.5, fontWeight: 600 },
   tabBtnActive: { background: "#FFFFFF", color: "#0D9488", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
