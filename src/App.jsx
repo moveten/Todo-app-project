@@ -447,10 +447,9 @@ function AppInner() {
     const next = { ...base, [key]: !base[key] };
     setRoutineState(next);
     storage.set(ROUTINE_KEY, JSON.stringify(next)).catch(() => {});
-  };
-
-  const handleRoutineComplete = () => {
-    showToast("오늘 루틴 완료! 🎉");
+    if (next.rule && next.grip) {
+      showToast("오늘 루틴 완료! 🎉");
+    }
   };
 
   const persist = async (next) => {
@@ -683,11 +682,6 @@ function AppInner() {
                     </span>
                     악력기
                   </button>
-                  {todayRoutine.rule && todayRoutine.grip && (
-                    <button onClick={handleRoutineComplete} style={styles.routineDoneBtn}>
-                      완료
-                    </button>
-                  )}
                 </div>
               ) : (
                 <div style={styles.subLabel}>달력</div>
@@ -2237,7 +2231,6 @@ const styles = {
   routineChipActive: { background: "#EAF6F4", color: "#0D9488" },
   routineCheckbox: { width: 15, height: 15, borderRadius: "50%", border: "1.5px solid #C7CDD3", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   routineCheckboxActive: { background: "#0D9488", border: "1.5px solid #0D9488" },
-  routineDoneBtn: { background: "#0D9488", color: "#fff", border: "none", borderRadius: 20, padding: "5px 14px", fontSize: 12.5, fontWeight: 700 },
   tabRow: { display: "flex", background: "#F0F2F4", borderRadius: 10, padding: 3, gap: 2, marginBottom: 0 },
   tabBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 0", borderRadius: 8, border: "none", background: "transparent", color: "#8A93A0", fontSize: 13.5, fontWeight: 600 },
   tabBtnActive: { background: "#FFFFFF", color: "#0D9488", boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
