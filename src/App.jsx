@@ -212,12 +212,13 @@ function normalizeReminder(r) {
     label: r.label,
     done: !!r.done,
     doneDate: r.doneDate || null,
+    ready: !!r.ready,
     checklist: r.checklist || [],
   };
 }
 
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, photos: [], ...raw, reminders: raw.reminders.map(normalizeReminder) };
+  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, photos: [], ready: false, ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -230,6 +231,7 @@ function normalizeItem(raw) {
     lastDoneDate: null,
     doneDate: null,
     photos: [],
+    ready: false,
     reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
@@ -284,6 +286,7 @@ function buildTodos(items, today) {
         note: it.note || "",
         photos: it.photos || [],
         done: mainDoneRelevant,
+        ready: !!it.ready,
       });
     }
     (it.reminders || []).forEach((r) => {
@@ -307,12 +310,14 @@ function buildTodos(items, today) {
           time: it.time || "00:00",
           checklist: r.checklist || [],
           done: reminderDoneRelevant,
+          ready: !!r.ready,
         });
       }
     });
   });
   todos.sort((a, b) => {
     if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+    if (!!a.ready !== !!b.ready) return a.ready ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (a.occurDate !== b.occurDate) return a.occurDate < b.occurDate ? -1 : 1;
     if (a.itemDate !== b.itemDate) return a.itemDate < b.itemDate ? -1 : 1;
@@ -566,6 +571,18 @@ export default function App() {
       )
     );
   };
+  const toggleMainReady = (itemId, ready) => {
+    persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, ready } : it)));
+  };
+  const toggleReminderReady = (itemId, reminderId, ready) => {
+    persist(
+      (itemsRef.current || []).map((it) =>
+        it.id === itemId
+          ? { ...it, reminders: it.reminders.map((r) => (r.id === reminderId ? { ...r, ready } : r)) }
+          : it
+      )
+    );
+  };
   const togglePinned = (itemId) => {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
   };
@@ -659,6 +676,8 @@ export default function App() {
             onToggleMain={toggleMainDone}
             onToggleReminder={toggleReminderDone}
             onToggleDaily={toggleDailyDone}
+            onToggleMainReady={toggleMainReady}
+            onToggleReminderReady={toggleReminderReady}
             onView={(t) => setModal({ mode: "view", item: items.find((it) => it.id === t.itemId) })}
             onEdit={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
             onDelete={deleteItem}
@@ -707,20 +726,22 @@ export default function App() {
 }
 
 // ---------- 리스트 뷰 ----------
-function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder, onToggleDaily, onView, onEdit, onDelete, onPin, manualOrder, onReorder }) {
+function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder, onToggleDaily, onToggleMainReady, onToggleReminderReady, onView, onEdit, onDelete, onPin, manualOrder, onReorder }) {
   const [showUpcoming, setShowUpcoming] = useState(false);
   const keyOf = (t) => `${t.itemId}:${t.reminderId || "main"}`;
   const notDone = todos.filter((t) => !t.done);
   const done = todos.filter((t) => t.done);
-  const notDoneKeys = notDone.map(keyOf);
-  const notDoneKeysJoined = notDoneKeys.join(",");
+  const activeItems = notDone.filter((t) => !t.ready);
+  const readyItems = notDone.filter((t) => t.ready);
+  const activeKeys = activeItems.map(keyOf);
+  const activeKeysJoined = activeKeys.join(",");
   const todoMap = {};
   notDone.forEach((t) => (todoMap[keyOf(t)] = t));
-  const pinnedSignature = notDone.map((t) => (t.pinned ? "1" : "0")).join("");
+  const pinnedSignature = activeItems.map((t) => (t.pinned ? "1" : "0")).join("");
 
   const [order, setOrder] = useState(() => {
-    const validManual = (manualOrder || []).filter((k) => notDoneKeys.includes(k));
-    const added = notDoneKeys.filter((k) => !validManual.includes(k));
+    const validManual = (manualOrder || []).filter((k) => activeKeys.includes(k));
+    const added = activeKeys.filter((k) => !validManual.includes(k));
     const merged = [...validManual, ...added];
     const pinnedKeys = merged.filter((k) => todoMap[k] && todoMap[k].pinned);
     const restKeys = merged.filter((k) => !(todoMap[k] && todoMap[k].pinned));
@@ -728,8 +749,8 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
   });
   useEffect(() => {
     setOrder((prev) => {
-      const stillValid = prev.filter((k) => notDoneKeys.includes(k));
-      const added = notDoneKeys.filter((k) => !stillValid.includes(k));
+      const stillValid = prev.filter((k) => activeKeys.includes(k));
+      const added = activeKeys.filter((k) => !stillValid.includes(k));
       const merged = [...stillValid, ...added];
       // 고정된 항목은 항상 맨 위로 올라오게 함
       const pinnedKeys = merged.filter((k) => todoMap[k] && todoMap[k].pinned);
@@ -737,7 +758,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
       return [...pinnedKeys, ...restKeys];
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notDoneKeysJoined, pinnedSignature]);
+  }, [activeKeysJoined, pinnedSignature]);
 
   const rowRefs = useRef({});
   const orderRef = useRef(order);
@@ -830,7 +851,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
         }}
         onPin={() => onPin(t.itemId)}
       >
-        <div style={styles.card}>
+        <div style={{ ...styles.card, background: t.ready && !t.done ? "#EAF7EC" : "#FFFFFF" }}>
           <button
             onClick={() => {
               if (isDaily) {
@@ -914,6 +935,18 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
                   <ImageIcon size={12} />
                 </span>
               )}
+              {!isDaily && !t.done && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const setReady = t.kind === "main" ? onToggleMainReady : onToggleReminderReady;
+                    t.kind === "main" ? setReady(t.itemId, !t.ready) : setReady(t.itemId, t.reminderId, !t.ready);
+                  }}
+                  style={t.ready ? styles.readyChipActive : styles.readyChip}
+                >
+                  준비완료
+                </button>
+              )}
             </div>
           </div>
           <ChevronRight size={16} color="#A8AFB8" onClick={() => onView(t)} style={{ cursor: "pointer", flexShrink: 0 }} />
@@ -978,6 +1011,12 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
           </div>
         );
       })}
+      {readyItems.length > 0 && (
+        <div style={styles.readySectionLabel}>준비완료</div>
+      )}
+      {readyItems.map((t) => (
+        <div key={keyOf(t)}>{renderCard(t)}</div>
+      ))}
       {done.map((t) => (
         <div key={keyOf(t)}>{renderCard(t)}</div>
       ))}
@@ -2159,6 +2198,9 @@ const styles = {
   directionBtnActiveAfter: { background: "#fff", color: "#B45309", boxShadow: "0 1px 2px rgba(15,23,42,0.08)" },
   checklistMeta: { color: "#8A93A0", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", border: "1px solid #D7DCE1", width: 22, height: 22, borderRadius: "50%" },
   noteMeta: { color: "#8A93A0", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "#fff", border: "1px solid #D7DCE1", width: 22, height: 22, borderRadius: "50%" },
+  readyChip: { display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 700, color: "#5B6470", background: "#fff", border: "1px solid #D7DCE1", borderRadius: 20, padding: "3px 9px" },
+  readyChipActive: { display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 700, color: "#16A34A", background: "#DDF3E1", border: "1px solid #BCE7C4", borderRadius: 20, padding: "3px 9px" },
+  readySectionLabel: { fontSize: 11.5, fontWeight: 700, color: "#8A93A0", margin: "10px 2px 6px" },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
   registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
   tplHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
