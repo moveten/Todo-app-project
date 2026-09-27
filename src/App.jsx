@@ -336,7 +336,20 @@ export default function App() {
   const [loadWarning, setLoadWarning] = useState(false);
   const [lastBackupAt, setLastBackupAt] = useState(null);
   const [manualOrder, setManualOrderState] = useState([]);
+  const [toast, setToast] = useState(null); // null | { text: string, key: number }
+  const toastTimerRef = useRef(null);
   const itemsRef = useRef(null);
+
+  const showToast = (text) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ text, key: Date.now() });
+    toastTimerRef.current = setTimeout(() => setToast(null), 1600);
+  };
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   // ---- 안전한 불러오기: 메인 데이터가 손상/유실됐으면 백업 키에서 자동 복구 ----
   const loadWithBackup = async (mainKey, backupKey) => {
@@ -584,7 +597,10 @@ export default function App() {
     );
   };
   const togglePinned = (itemId) => {
+    const current = (itemsRef.current || []).find((it) => it.id === itemId);
+    const willPin = !(current && current.pinned);
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
+    showToast(willPin ? "항목이 고정되었습니다" : "고정이 해제되었습니다");
   };
   const restoreItem = (itemId) => {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done: false, doneDate: null } : it)));
@@ -605,6 +621,12 @@ export default function App() {
         ::placeholder { color: #A8AFB8; }
         .scrollbox::-webkit-scrollbar { width: 6px; }
         .scrollbox::-webkit-scrollbar-thumb { background: #DDE2E7; border-radius: 3px; }
+        @keyframes toastFade {
+          0% { opacity: 0; transform: translate(-50%, 6px); }
+          12% { opacity: 1; transform: translate(-50%, 0); }
+          82% { opacity: 1; transform: translate(-50%, 0); }
+          100% { opacity: 0; transform: translate(-50%, 6px); }
+        }
       `}</style>
 
       {!modal && (
@@ -720,6 +742,12 @@ export default function App() {
         >
           <Plus size={24} color="#fff" />
         </button>
+      )}
+
+      {toast && (
+        <div key={toast.key} style={styles.toast}>
+          {toast.text}
+        </div>
       )}
     </div>
   );
@@ -2180,6 +2208,7 @@ const styles = {
   loadWarningBar: { display: "flex", alignItems: "center", background: "#FDF3DC", color: "#96691C", fontSize: 11.5, padding: "8px 34px 8px 12px", position: "relative" },
   loadWarningCloseBtn: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none" },
   fab: { position: "fixed", right: 20, bottom: 28, width: 56, height: 56, borderRadius: "50%", background: "#0D9488", border: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 16px rgba(13,148,136,0.35)", zIndex: 30 },
+  toast: { position: "fixed", left: "50%", bottom: 96, transform: "translateX(-50%)", background: "rgba(30,35,42,0.92)", color: "#fff", fontSize: 13, padding: "10px 18px", borderRadius: 20, boxShadow: "0 4px 14px rgba(0,0,0,0.2)", zIndex: 80, whiteSpace: "nowrap", pointerEvents: "none", animation: "toastFade 1.6s ease forwards" },
   calNavRow: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 4px 12px" },
   calNavLeft: { display: "flex", alignItems: "center", gap: 10 },
   calMonthLabel: { fontSize: 16, fontWeight: 700, color: "#1F2937", letterSpacing: 0.2 },
