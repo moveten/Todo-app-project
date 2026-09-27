@@ -856,10 +856,12 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
           <button
             onClick={() => {
               if (isDaily) {
+                if (t.done && !window.confirm("복귀하시겠습니까?")) return;
                 onToggleDaily(t.itemId, !t.done);
                 return;
               }
               if (t.done) {
+                if (!window.confirm("복귀하시겠습니까?")) return;
                 t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
                 return;
               }
@@ -893,6 +895,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (!window.confirm("복귀하시겠습니까?")) return;
                       onToggleDaily(t.itemId, false);
                     }}
                     style={styles.restoreBtn}
@@ -907,6 +910,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (!window.confirm("복귀하시겠습니까?")) return;
                     t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
                   }}
                   style={styles.restoreBtn}
@@ -918,6 +922,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (!window.confirm("복귀하시겠습니까?")) return;
                     t.kind === "main" ? onToggleMainReady(t.itemId, false) : onToggleReminderReady(t.itemId, t.reminderId, false);
                   }}
                   style={styles.restoreBtn}
