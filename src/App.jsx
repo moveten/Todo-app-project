@@ -728,6 +728,7 @@ export default function App() {
 // ---------- 리스트 뷰 ----------
 function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder, onToggleDaily, onToggleMainReady, onToggleReminderReady, onView, onEdit, onDelete, onPin, manualOrder, onReorder }) {
   const [showUpcoming, setShowUpcoming] = useState(false);
+  const [choicePrompt, setChoicePrompt] = useState(null); // 완료 처리 vs 준비완료 처리 선택 중인 항목
   const keyOf = (t) => `${t.itemId}:${t.reminderId || "main"}`;
   const notDone = todos.filter((t) => !t.done);
   const done = todos.filter((t) => t.done);
@@ -862,9 +863,20 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
                 t.kind === "main" ? onToggleMain(t.itemId, false) : onToggleReminder(t.itemId, t.reminderId, false);
                 return;
               }
-              t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
+              if (t.ready) {
+                if (!window.confirm("완료 처리하시겠습니까?")) return;
+                if (t.kind === "main") {
+                  onToggleMain(t.itemId, true);
+                  onToggleMainReady(t.itemId, false);
+                } else {
+                  onToggleReminder(t.itemId, t.reminderId, true);
+                  onToggleReminderReady(t.itemId, t.reminderId, false);
+                }
+                return;
+              }
+              setChoicePrompt(t);
             }}
-            style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : "#D7DCE1" }}
+            style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : t.ready ? "#16A34A" : "#D7DCE1" }}
             aria-label="완료 처리"
           >
             <Check size={13} color={t.done ? "#fff" : "transparent"} />
@@ -935,17 +947,8 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
                   <ImageIcon size={12} />
                 </span>
               )}
-              {!isDaily && !t.done && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const setReady = t.kind === "main" ? onToggleMainReady : onToggleReminderReady;
-                    t.kind === "main" ? setReady(t.itemId, !t.ready) : setReady(t.itemId, t.reminderId, !t.ready);
-                  }}
-                  style={t.ready ? styles.readyChipActive : styles.readyChip}
-                >
-                  준비완료
-                </button>
+              {t.ready && !t.done && (
+                <span style={styles.readyChipActive}>준비완료</span>
               )}
             </div>
           </div>
@@ -1021,6 +1024,36 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
         <div key={keyOf(t)}>{renderCard(t)}</div>
       ))}
       {upcomingSection}
+      {choicePrompt && (
+        <div style={styles.choiceOverlay} onClick={() => setChoicePrompt(null)}>
+          <div style={styles.choiceSheet} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.choiceTitle}>{choicePrompt.label}</div>
+            <button
+              style={styles.choiceBtnDone}
+              onClick={() => {
+                const t = choicePrompt;
+                t.kind === "main" ? onToggleMain(t.itemId, true) : onToggleReminder(t.itemId, t.reminderId, true);
+                setChoicePrompt(null);
+              }}
+            >
+              완료 처리
+            </button>
+            <button
+              style={styles.choiceBtnReady}
+              onClick={() => {
+                const t = choicePrompt;
+                t.kind === "main" ? onToggleMainReady(t.itemId, true) : onToggleReminderReady(t.itemId, t.reminderId, true);
+                setChoicePrompt(null);
+              }}
+            >
+              준비완료 처리
+            </button>
+            <button style={styles.choiceCancelBtn} onClick={() => setChoicePrompt(null)}>
+              취소
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2201,6 +2234,12 @@ const styles = {
   readyChip: { display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 700, color: "#5B6470", background: "#fff", border: "1px solid #D7DCE1", borderRadius: 20, padding: "3px 9px" },
   readyChipActive: { display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 700, color: "#16A34A", background: "#DDF3E1", border: "1px solid #BCE7C4", borderRadius: 20, padding: "3px 9px" },
   readySectionLabel: { fontSize: 11.5, fontWeight: 700, color: "#8A93A0", margin: "10px 2px 6px" },
+  choiceOverlay: { position: "fixed", inset: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "flex-end", zIndex: 60 },
+  choiceSheet: { width: "100%", background: "#fff", borderRadius: "20px 20px 0 0", padding: "22px 18px calc(22px + env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", gap: 10 },
+  choiceTitle: { fontSize: 15, fontWeight: 700, color: "#1F2937", textAlign: "center", marginBottom: 6 },
+  choiceBtnDone: { background: "#0D9488", color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
+  choiceBtnReady: { background: "#DDF3E1", color: "#16A34A", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
+  choiceCancelBtn: { background: "#F0F2F4", color: "#5B6470", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 14.5, fontWeight: 600, marginTop: 2 },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
   registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
   tplHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
