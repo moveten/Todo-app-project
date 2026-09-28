@@ -919,7 +919,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
 
   const renderCard = (t) => {
     const isDaily = t.kind === "daily";
-    const dday = isDaily ? null : dDayLabel(t.itemDate, today);
+    const dday = isDaily ? null : dDayLabel(t.occurDate, today);
     const isPastOrToday = !isDaily && (dday === "D-DAY" || dday.startsWith("D+"));
     return (
       <SwipeRow
