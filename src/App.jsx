@@ -966,7 +966,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
               <span style={styles.cardTitleWrap}>
                 {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
                 <span style={{ ...styles.stepLabel, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#9AA3AF" : "#1F2937" }}>{t.label}</span>
-                {t.kind === "reminder" && <span style={styles.relatedParens}> (메인: {t.itemTitle})</span>}
+                {t.kind === "reminder" && <span style={styles.relatedTag}>딸림</span>}
               </span>
               {isDaily ? (
                 t.done ? (
@@ -2372,7 +2372,7 @@ const styles = {
   cardBody: { flex: 1, cursor: "pointer" },
   cardLine1: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
   cardTitleWrap: { minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  relatedParens: { fontSize: 12.5, color: "#9AA3AF", fontWeight: 500 },
+  relatedTag: { display: "inline-block", fontSize: 10.5, fontWeight: 700, color: "#8A93A0", background: "#EEF0F2", borderRadius: 6, padding: "1px 5px", marginLeft: 5, verticalAlign: 1 },
   ddayText: { fontSize: 14, fontWeight: 700, flexShrink: 0 },
   restoreBtn: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "4px 10px", fontSize: 11.5, fontWeight: 700, color: "#5B6470", flexShrink: 0 },
   stepLabel: { fontSize: 15, fontWeight: 600, color: "#1F2937", lineHeight: 1.35 },
