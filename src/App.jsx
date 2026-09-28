@@ -636,6 +636,7 @@ function AppInner() {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, lastDoneDate: done ? today : null } : it)));
   };
   const savePreset = (preset) => persistPresets([...presets, preset]);
+  const updatePreset = (updated) => persistPresets(presets.map((p) => (p.id === updated.id ? updated : p)));
   const deletePreset = (id) => persistPresets(presets.filter((p) => p.id !== id));
 
   return (
@@ -736,6 +737,7 @@ function AppInner() {
             onDelete={deleteItem}
             onSavePreset={savePreset}
             onDeletePreset={deletePreset}
+            onUpdatePreset={updatePreset}
           />
         ) : view === "list" ? (
           <ListView
@@ -1714,7 +1716,7 @@ function ViewModal({ item, today, onClose, onEdit, onSave }) {
 }
 
 // ---------- 일정 추가/수정 모달 ----------
-function EventModal({ mode, initialItem, today, defaultDate, presets, items, onClose, onSave, onDelete, onSavePreset, onDeletePreset }) {
+function EventModal({ mode, initialItem, today, defaultDate, presets, items, onClose, onSave, onDelete, onSavePreset, onDeletePreset, onUpdatePreset }) {
   const [title, setTitle] = useState(initialItem?.title || "");
   const [debouncedTitle, setDebouncedTitle] = useState(title);
   const [titleSuggestOpen, setTitleSuggestOpen] = useState(false);
@@ -1738,6 +1740,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
   );
   const [managePresets, setManagePresets] = useState(false);
   const [appliedPresetId, setAppliedPresetId] = useState(null);
+  const [editingPreset, setEditingPreset] = useState(null);
   const firstInput = useRef(null);
 
   useLayoutEffect(() => {
@@ -1951,9 +1954,14 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
                     <span style={{ opacity: 0.6, fontWeight: 500 }}> · {(p.reminders || []).length}단계</span>
                   </button>
                   {managePresets && (
-                    <button onClick={() => onDeletePreset(p.id)} style={styles.tplDeleteBtn}>
-                      <Trash2 size={12} color="#DC5B45" />
-                    </button>
+                    <>
+                      <button onClick={() => setEditingPreset(p)} style={styles.tplEditBtn}>
+                        <Pencil size={12} color="#5B6470" />
+                      </button>
+                      <button onClick={() => onDeletePreset(p.id)} style={styles.tplDeleteBtn}>
+                        <Trash2 size={12} color="#DC5B45" />
+                      </button>
+                    </>
                   )}
                 </div>
               ))}
@@ -2157,6 +2165,16 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
           onConfirm={confirmPresetName}
         />
       )}
+      {editingPreset && (
+        <PresetEditModal
+          preset={editingPreset}
+          onCancel={() => setEditingPreset(null)}
+          onSave={(updated) => {
+            onUpdatePreset(updated);
+            setEditingPreset(null);
+          }}
+        />
+      )}
       {viewPhoto && (
         <div
           style={styles.photoViewerOverlay}
@@ -2173,6 +2191,111 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
 }
 
 // ---------- 이름 입력용 커스텀 프롬프트 (네이티브 prompt는 키보드 자동 표시가 안 되는 기기가 있어 자체 구현) ----------
+function PresetEditModal({ preset, onCancel, onSave }) {
+  const [name, setName] = useState(preset.name || "");
+  const [checklist, setChecklist] = useState((preset.checklist || []).map((c) => ({ id: uid(), text: c.text, checked: false })));
+  const [reminders, setReminders] = useState(
+    (preset.reminders || []).map((r) => ({ id: uid(), days: r.days ?? 1, direction: r.direction || "before", label: r.label || "" }))
+  );
+
+  const updateReminder = (id, field, val) => {
+    setReminders(reminders.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
+  };
+  const addReminder = () => setReminders([...reminders, { id: uid(), days: 1, direction: "before", label: "" }]);
+  const removeReminder = (id) => setReminders(reminders.filter((r) => r.id !== id));
+
+  const canSave = name.trim().length > 0;
+
+  const handleSave = () => {
+    if (!canSave) return;
+    onSave({
+      id: preset.id,
+      name: name.trim(),
+      checklist: checklist.filter((c) => c.text.trim()).map((c) => ({ text: c.text.trim() })),
+      reminders: reminders
+        .filter((r) => r.label.trim())
+        .map((r) => ({ days: Number(r.days) || 0, direction: r.direction === "after" ? "after" : "before", label: r.label.trim() })),
+    });
+  };
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.pageHeaderRow}>
+        <button onClick={onCancel} style={styles.iconBtn}>
+          <X size={18} color="#5B6470" />
+        </button>
+        <div style={styles.modalTitle}>프리셋 수정</div>
+        <div style={{ width: 30 }} />
+      </div>
+
+      <label style={styles.formLabel}>프리셋 이름</label>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="프리셋 이름을 입력하세요"
+        style={styles.formInput}
+      />
+
+      <div style={styles.checklistSectionWrap}>
+        <div style={styles.checklistSectionHeaderRow}>
+          <span style={styles.checklistSectionLabel}>
+            <ListChecks size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
+            체크리스트
+          </span>
+        </div>
+        <ChecklistEditor items={checklist} onChange={setChecklist} />
+      </div>
+
+      {reminders.map((r) => (
+        <div key={r.id} style={styles.reminderBlock}>
+          <div style={styles.stepEditRow}>
+            <input
+              type="number"
+              min="0"
+              value={r.days}
+              onChange={(e) => updateReminder(r.id, "days", e.target.value)}
+              style={styles.dayInput}
+            />
+            <div style={styles.directionToggle}>
+              <button
+                onClick={() => updateReminder(r.id, "direction", "before")}
+                style={{ ...styles.directionBtn, ...(r.direction !== "after" ? styles.directionBtnActive : {}) }}
+              >
+                일 전
+              </button>
+              <button
+                onClick={() => updateReminder(r.id, "direction", "after")}
+                style={{ ...styles.directionBtn, ...(r.direction === "after" ? styles.directionBtnActiveAfter : {}) }}
+              >
+                일 후
+              </button>
+            </div>
+            <button onClick={() => removeReminder(r.id)} style={styles.stepRemoveBtn}>
+              <X size={14} color="#A8AFB8" />
+            </button>
+          </div>
+          <input
+            value={r.label}
+            onChange={(e) => updateReminder(r.id, "label", e.target.value)}
+            placeholder={r.direction === "after" ? "후속 조치 내용" : "할 일"}
+            style={{ ...styles.stepLabelInput, width: "100%", marginTop: 6 }}
+          />
+        </div>
+      ))}
+      <button onClick={addReminder} style={styles.registerChecklistBtn}>
+        <Plus size={14} style={{ marginRight: 6 }} />
+        관련 디데이 추가
+      </button>
+
+      <div style={styles.pageFooterSticky}>
+        <button style={{ ...styles.doneBtn, opacity: canSave ? 1 : 0.4 }} onClick={handleSave} disabled={!canSave}>
+          수정 완료
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NamePromptModal({ title, defaultValue, onCancel, onConfirm }) {
   const [value, setValue] = useState(defaultValue || "");
   const inputRef = useRef(null);
@@ -2354,6 +2477,7 @@ const styles = {
   tplChipRow: { display: "flex", flexWrap: "wrap", gap: 8 },
   tplChipWrap: { display: "flex", alignItems: "center", gap: 4 },
   tplChip: { border: "1.5px solid #E5E9EC", borderRadius: 20, padding: "7px 13px", fontSize: 12.5, fontWeight: 700 },
+  tplEditBtn: { background: "#EEF0F2", border: "none", borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   tplDeleteBtn: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   tplHint: { fontSize: 11.5, color: "#8A93A0", marginTop: 8 },
   checklistSectionWrap: { background: "#F7F8FA", borderRadius: 10, padding: "10px 10px", marginTop: 10 },
