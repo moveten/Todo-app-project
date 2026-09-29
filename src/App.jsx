@@ -213,12 +213,13 @@ function normalizeReminder(r) {
     done: !!r.done,
     doneDate: r.doneDate || null,
     ready: !!r.ready,
+    urgent: !!r.urgent,
     checklist: r.checklist || [],
   };
 }
 
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, photos: [], ready: false, ...raw, reminders: raw.reminders.map(normalizeReminder) };
+  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, photos: [], ready: false, urgent: false, ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -232,6 +233,7 @@ function normalizeItem(raw) {
     doneDate: null,
     photos: [],
     ready: false,
+    urgent: false,
     reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
@@ -281,6 +283,7 @@ function buildTodos(items, today) {
         itemDate: it.date,
         occurDate: it.date,
         pinned: !!it.pinned,
+        urgent: !!it.urgent,
         time: it.time || "00:00",
         hasSub: (it.reminders || []).length > 0,
         checklist: it.checklist || [],
@@ -308,6 +311,7 @@ function buildTodos(items, today) {
           itemDate: it.date,
           occurDate: occur,
           pinned: !!it.pinned,
+          urgent: !!r.urgent,
           time: it.time || "00:00",
           checklist: r.checklist || [],
           done: reminderDoneRelevant,
@@ -319,6 +323,7 @@ function buildTodos(items, today) {
   todos.sort((a, b) => {
     if (!!a.done !== !!b.done) return a.done ? 1 : -1;
     if (!!a.ready !== !!b.ready) return a.ready ? 1 : -1;
+    if (!!a.urgent !== !!b.urgent) return a.urgent ? -1 : 1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (a.occurDate !== b.occurDate) return a.occurDate < b.occurDate ? -1 : 1;
     if (a.itemDate !== b.itemDate) return a.itemDate < b.itemDate ? -1 : 1;
@@ -629,6 +634,27 @@ function AppInner() {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, pinned: !it.pinned } : it)));
     showToast(willPin ? "항목이 고정되었습니다" : "고정이 해제되었습니다");
   };
+  const toggleUrgent = (t) => {
+    const list = itemsRef.current || [];
+    if (t.kind === "reminder") {
+      const parent = list.find((it) => it.id === t.itemId);
+      const rem = parent && (parent.reminders || []).find((r) => r.id === t.reminderId);
+      const willMark = !(rem && rem.urgent);
+      persist(
+        list.map((it) =>
+          it.id === t.itemId
+            ? { ...it, reminders: it.reminders.map((r) => (r.id === t.reminderId ? { ...r, urgent: !r.urgent } : r)) }
+            : it
+        )
+      );
+      showToast(willMark ? "긴급으로 표시했어요" : "긴급 표시를 해제했어요");
+    } else {
+      const current = list.find((it) => it.id === t.itemId);
+      const willMark = !(current && current.urgent);
+      persist(list.map((it) => (it.id === t.itemId ? { ...it, urgent: !it.urgent } : it)));
+      showToast(willMark ? "긴급으로 표시했어요" : "긴급 표시를 해제했어요");
+    }
+  };
   const restoreItem = (itemId) => {
     persist((itemsRef.current || []).map((it) => (it.id === itemId ? { ...it, done: false, doneDate: null } : it)));
   };
@@ -753,6 +779,7 @@ function AppInner() {
             onEdit={(t) => setModal({ mode: "edit", item: items.find((it) => it.id === t.itemId) })}
             onDelete={deleteItem}
             onPin={togglePinned}
+            onToggleUrgent={toggleUrgent}
             manualOrder={manualOrder}
             onReorder={setManualOrder}
           />
@@ -803,7 +830,7 @@ function AppInner() {
 }
 
 // ---------- 리스트 뷰 ----------
-function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder, onToggleDaily, onToggleMainReady, onToggleReminderReady, onView, onEdit, onDelete, onPin, manualOrder, onReorder }) {
+function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder, onToggleDaily, onToggleMainReady, onToggleReminderReady, onView, onEdit, onDelete, onPin, onToggleUrgent, manualOrder, onReorder }) {
   const [showUpcoming, setShowUpcoming] = useState(false);
   const [choicePrompt, setChoicePrompt] = useState(null); // 완료 처리 vs 준비완료 처리 선택 중인 항목
   const keyOf = (t) => `${t.itemId}:${t.reminderId || "main"}`;
@@ -924,13 +951,21 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
     return (
       <SwipeRow
         pinned={t.pinned}
+        urgent={t.urgent}
         onEdit={() => onEdit(t)}
         onDelete={() => {
           if (window.confirm("이 일정을 삭제할까요?")) onDelete(t.itemId);
         }}
         onPin={() => onPin(t.itemId)}
+        onToggleUrgent={() => onToggleUrgent(t)}
       >
-        <div style={{ ...styles.card, background: t.ready && !t.done ? "#EAF7EC" : "#FFFFFF" }}>
+        <div
+          style={{
+            ...styles.card,
+            background: t.urgent && !t.done ? "#FDECEA" : t.ready && !t.done ? "#EAF7EC" : "#FFFFFF",
+            border: t.urgent && !t.done ? "1px solid #F3B7AF" : "1px solid transparent",
+          }}
+        >
           <button
             onClick={() => {
               if (isDaily) {
@@ -956,7 +991,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
               }
               setChoicePrompt(t);
             }}
-            style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : t.ready ? "#16A34A" : "#D7DCE1" }}
+            style={{ ...styles.checkCircle, background: t.done ? "#0D9488" : "transparent", borderColor: t.done ? "#0D9488" : t.ready ? "#16A34A" : t.urgent ? "#DC5B45" : "#D7DCE1" }}
             aria-label="완료 처리"
           >
             <Check size={13} color={t.done ? "#fff" : "transparent"} />
@@ -964,6 +999,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
           <div style={styles.cardBody} onClick={() => onView(t)}>
             <div style={styles.cardLine1}>
               <span style={styles.cardTitleWrap}>
+                {t.urgent && <span style={styles.urgentTag}>긴급</span>}
                 {t.pinned && <Pin size={12} color="#8A93A0" style={{ marginRight: 4, verticalAlign: -1 }} />}
                 <span style={{ ...styles.stepLabel, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#9AA3AF" : "#1F2937" }}>{t.label}</span>
                 {t.kind === "reminder" && <span style={styles.relatedTag}>딸림</span>}
@@ -1157,7 +1193,7 @@ function ListView({ todos, upcomingItems, today, onToggleMain, onToggleReminder,
 }
 
 // ---------- 스와이프 (왼쪽: 수정/삭제, 오른쪽: 고정) ----------
-function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
+function SwipeRow({ children, pinned, urgent, onEdit, onDelete, onPin, onToggleUrgent }) {
   const [x, setX] = useState(0);
   const dragRef = useRef({ startX: 0, startY: 0, dragging: false, moved: false, lockDir: null });
   const LEFT_OPEN = -144; // 수정 + 삭제
@@ -1237,6 +1273,16 @@ function SwipeRow({ children, pinned, onEdit, onDelete, onPin }) {
             >
               <Pencil size={16} style={{ marginRight: 6 }} />
               수정
+            </button>
+            <button
+              style={styles.choiceBtnUrgent}
+              onClick={() => {
+                setActionSheetKind(null);
+                onToggleUrgent();
+              }}
+            >
+              <AlertTriangle size={16} style={{ marginRight: 6 }} />
+              {urgent ? "긴급 해제" : "긴급으로 표시"}
             </button>
             <button
               style={styles.choiceBtnDelete}
@@ -2373,6 +2419,7 @@ const styles = {
   cardLine1: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
   cardTitleWrap: { minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   relatedTag: { display: "inline-block", fontSize: 10.5, fontWeight: 700, color: "#8A93A0", background: "#EEF0F2", borderRadius: 6, padding: "1px 5px", marginLeft: 5, verticalAlign: 1 },
+  urgentTag: { display: "inline-block", fontSize: 10.5, fontWeight: 800, color: "#fff", background: "#DC5B45", borderRadius: 6, padding: "1px 6px", marginRight: 5, verticalAlign: 1 },
   ddayText: { fontSize: 14, fontWeight: 700, flexShrink: 0 },
   restoreBtn: { display: "inline-flex", alignItems: "center", background: "#F0F2F4", border: "none", borderRadius: 20, padding: "4px 10px", fontSize: 11.5, fontWeight: 700, color: "#5B6470", flexShrink: 0 },
   stepLabel: { fontSize: 15, fontWeight: 600, color: "#1F2937", lineHeight: 1.35 },
@@ -2467,6 +2514,7 @@ const styles = {
   choiceSheet: { width: "100%", background: "#fff", borderRadius: "20px 20px 0 0", padding: "22px 18px calc(22px + env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", gap: 10 },
   choiceTitle: { fontSize: 15, fontWeight: 700, color: "#1F2937", textAlign: "center", marginBottom: 6 },
   choiceBtnDone: { display: "flex", alignItems: "center", justifyContent: "center", background: "#0D9488", color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
+  choiceBtnUrgent: { display: "flex", alignItems: "center", justifyContent: "center", background: "#FDECEA", color: "#DC5B45", border: "1px solid #F3B7AF", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
   choiceBtnReady: { background: "#DDF3E1", color: "#16A34A", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
   choiceBtnDelete: { display: "flex", alignItems: "center", justifyContent: "center", background: "#FBEAE7", color: "#DC5B45", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
   choiceCancelBtn: { background: "#F0F2F4", color: "#5B6470", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 14.5, fontWeight: 600, marginTop: 2 },
