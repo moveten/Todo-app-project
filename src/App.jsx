@@ -219,7 +219,7 @@ function normalizeReminder(r) {
 }
 
 function normalizeItem(raw) {
-  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, photos: [], ready: false, urgent: false, ...raw, reminders: raw.reminders.map(normalizeReminder) };
+  if (raw.reminders) return { pinned: false, time: "00:00", note: "", recurring: false, lastDoneDate: null, doneDate: null, photos: [], ready: false, urgent: false, startDate: null, ...raw, reminders: raw.reminders.map(normalizeReminder) };
   return {
     id: raw.id,
     title: raw.title,
@@ -234,6 +234,7 @@ function normalizeItem(raw) {
     photos: [],
     ready: false,
     urgent: false,
+    startDate: null,
     reminders: (raw.steps || []).map((s) => normalizeReminder(s)),
   };
 }
@@ -273,7 +274,8 @@ function buildTodos(items, today) {
     // done인데 doneDate가 없는 경우(예전 버전 데이터/버그로 유실된 경우)는
     // 완료 정보를 아예 잃어버리지 않도록 오늘 완료한 것으로 간주해서 복구함
     const mainDoneRelevant = it.done && (!it.doneDate || it.doneDate === today);
-    if ((!it.done && it.date <= today) || mainDoneRelevant) {
+    const effectiveShowDate = it.startDate && it.startDate < it.date ? it.startDate : it.date;
+    if ((!it.done && effectiveShowDate <= today) || mainDoneRelevant) {
       todos.push({
         itemId: it.id,
         reminderId: null,
@@ -588,7 +590,7 @@ function AppInner() {
   const activeCount = todos.filter((t) => !t.done).length;
   const todayRoutine = routine.date === today ? routine : { date: today, rule: false, grip: false };
   const upcomingItems = items
-    .filter((it) => !it.recurring && it.date > today)
+    .filter((it) => !it.recurring && it.date > today && !(it.startDate && it.startDate <= today))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const backupOverdue =
     items.length > 0 &&
@@ -1772,6 +1774,8 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
   const [recurring, setRecurring] = useState(initialItem?.recurring || false);
   const [date, setDate] = useState(initialItem?.date || defaultDate || today);
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
+  const [startDateOn, setStartDateOn] = useState(!!initialItem?.startDate);
+  const [startDate, setStartDate] = useState(initialItem?.startDate || today);
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
   const [checklistOpen, setChecklistOpen] = useState(!!(initialItem?.checklist && initialItem.checklist.length));
   const [reminders, setReminders] = useState(() =>
@@ -1782,6 +1786,9 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       label: r.label,
       done: r.done || false,
       doneDate: r.doneDate || null,
+      ready: r.ready || false,
+      urgent: r.urgent || false,
+      checklist: r.checklist || [],
     }))
   );
   const [managePresets, setManagePresets] = useState(false);
@@ -1892,11 +1899,14 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       photos,
       date: recurring ? initialItem?.date || today : date,
       time: recurring ? "00:00" : time || "00:00",
+      startDate: recurring || !startDateOn ? null : startDate,
       recurring,
       lastDoneDate: initialItem?.lastDoneDate || null,
       done: initialItem?.done || false,
       doneDate: initialItem?.doneDate || null,
       pinned: initialItem?.pinned || false,
+      ready: initialItem?.ready || false,
+      urgent: initialItem?.urgent || false,
       checklist,
       reminders: recurring
         ? []
@@ -1909,7 +1919,9 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
               label: r.label.trim(),
               done: r.done || false,
               doneDate: r.doneDate || null,
-              checklist: [],
+              ready: r.ready || false,
+              urgent: r.urgent || false,
+              checklist: r.checklist || [],
             })),
     });
   };
@@ -2102,6 +2114,25 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
             <div style={styles.dateWarningRow}>
               <AlertTriangle size={13} style={{ marginRight: 5 }} />
               이 날짜는 {warning.label}이에요.
+            </div>
+          )}
+
+          <div style={styles.recurringRow} onClick={() => setStartDateOn(!startDateOn)}>
+            <div style={{ ...styles.toggleTrack, background: startDateOn ? "#0D9488" : "#D7DCE1" }}>
+              <div style={{ ...styles.toggleThumb, transform: startDateOn ? "translateX(18px)" : "translateX(0)" }} />
+            </div>
+            <span style={styles.recurringLabel}>마감일 전부터 할 일 목록에 미리 표시</span>
+          </div>
+          {startDateOn && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="date"
+                value={startDate}
+                max={date}
+                onChange={(e) => setStartDate(e.target.value)}
+                style={{ ...styles.formInput, flex: 1 }}
+              />
+              <span style={{ fontSize: 12.5, color: "#8A93A0", flexShrink: 0 }}>부터 표시</span>
             </div>
           )}
         </>
