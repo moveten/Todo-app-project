@@ -1776,6 +1776,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
   const [time, setTime] = useState(initialItem?.time || nowHHMM());
   const [startDateOn, setStartDateOn] = useState(!!initialItem?.startDate);
   const [startDate, setStartDate] = useState(initialItem?.startDate || today);
+  const [urgent, setUrgent] = useState(initialItem?.urgent || false);
   const [checklist, setChecklist] = useState(initialItem?.checklist || []);
   const [checklistOpen, setChecklistOpen] = useState(!!(initialItem?.checklist && initialItem.checklist.length));
   const [reminders, setReminders] = useState(() =>
@@ -1906,7 +1907,7 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
       doneDate: initialItem?.doneDate || null,
       pinned: initialItem?.pinned || false,
       ready: initialItem?.ready || false,
-      urgent: initialItem?.urgent || false,
+      urgent,
       checklist,
       reminders: recurring
         ? []
@@ -2064,6 +2065,15 @@ function EventModal({ mode, initialItem, today, defaultDate, presets, items, onC
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        onClick={() => setUrgent(!urgent)}
+        style={{ ...styles.urgentToggleBtn, ...(urgent ? styles.urgentToggleBtnActive : {}) }}
+      >
+        <AlertTriangle size={14} style={{ marginRight: 6 }} />
+        긴급 (오늘 반드시 처리)
+      </button>
 
       <label style={styles.formLabel}>메모</label>
       <textarea
@@ -2550,6 +2560,8 @@ const styles = {
   choiceBtnDelete: { display: "flex", alignItems: "center", justifyContent: "center", background: "#FBEAE7", color: "#DC5B45", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 700 },
   choiceCancelBtn: { background: "#F0F2F4", color: "#5B6470", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 14.5, fontWeight: 600, marginTop: 2 },
   registerChecklistBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, color: "#5B6470", width: "100%", marginTop: 18 },
+  urgentToggleBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#F0F2F4", border: "1px solid transparent", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#8A93A0", width: "100%", marginTop: 10 },
+  urgentToggleBtnActive: { background: "#FDECEA", border: "1px solid #F3B7AF", color: "#DC5B45" },
   registerPresetBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#EEF6F5", border: "1px solid #CDE9E5", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700, color: "#0D9488", width: "100%", marginTop: 12 },
   tplHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   tplManageBtn: { background: "none", border: "none", fontSize: 12, fontWeight: 700, color: "#8A93A0", marginTop: 12 },
