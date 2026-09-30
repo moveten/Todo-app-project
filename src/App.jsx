@@ -1379,13 +1379,15 @@ function CalendarView({ items, today, onView, onEdit, onRestore, onSelectDate })
     <div>
       <div style={styles.calNavRow}>
         <div style={styles.calNavLeft}>
+          <button onClick={() => goMonth(-1)} style={styles.calNavBtn} aria-label="이전 달">
+            <ChevronsLeft size={20} color="#5B6470" />
+          </button>
           <div style={styles.calMonthLabel}>{monthLabel}</div>
-          <button onClick={goToday} style={styles.calTodayBtn}>오늘</button>
+          <button onClick={() => goMonth(1)} style={styles.calNavBtn} aria-label="다음 달">
+            <ChevronsRight size={20} color="#5B6470" />
+          </button>
         </div>
-        <div style={styles.calNavArrows}>
-          <button onClick={() => goMonth(-1)} style={styles.calNavBtn}><ChevronsLeft size={15} color="#5B6470" /></button>
-          <button onClick={() => goMonth(1)} style={styles.calNavBtn}><ChevronsRight size={15} color="#5B6470" /></button>
-        </div>
+        <button onClick={goToday} style={styles.calTodayBtn}>오늘</button>
       </div>
 
       <div style={styles.calSearchWrap}>
@@ -2473,11 +2475,10 @@ const styles = {
   fab: { position: "fixed", right: 20, bottom: 28, width: 56, height: 56, borderRadius: "50%", background: "#0D9488", border: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 16px rgba(13,148,136,0.35)", zIndex: 30 },
   toast: { position: "fixed", left: "50%", bottom: 96, transform: "translateX(-50%)", background: "rgba(30,35,42,0.92)", color: "#fff", fontSize: 13, padding: "10px 18px", borderRadius: 20, boxShadow: "0 4px 14px rgba(0,0,0,0.2)", zIndex: 80, whiteSpace: "nowrap", pointerEvents: "none", animation: "toastFade 1.6s ease forwards" },
   calNavRow: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 4px 12px" },
-  calNavLeft: { display: "flex", alignItems: "center", gap: 10 },
-  calMonthLabel: { fontSize: 16, fontWeight: 700, color: "#1F2937", letterSpacing: 0.2 },
+  calNavLeft: { display: "flex", alignItems: "center", gap: 4 },
+  calMonthLabel: { fontSize: 16, fontWeight: 700, color: "#1F2937", letterSpacing: 0.2, minWidth: 78, textAlign: "center" },
   calTodayBtn: { background: "#EEF6F5", border: "none", borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 700, color: "#0D9488" },
-  calNavArrows: { display: "flex", gap: 6 },
-  calNavBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" },
+  calNavBtn: { background: "#F0F2F4", border: "none", borderRadius: "50%", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   calCardWrap: { background: "#FFFFFF", borderRadius: 14, padding: "10px 6px 4px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
   calSearchWrap: { position: "relative", marginBottom: 12 },
   calSearchRow: { display: "flex", alignItems: "center", gap: 8, background: "#EAF6F4", border: "1.5px solid #BFE5DF", borderRadius: 12, padding: "10px 12px", boxShadow: "0 1px 3px rgba(15,23,42,0.05)" },
