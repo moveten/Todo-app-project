@@ -334,7 +334,7 @@ function buildTodos(items, today) {
   return todos;
 }
 
-function AppInner() {
+function AppInner({ onSwitchMode }) {
   const [items, setItems] = useState(null);
   const [presets, setPresets] = useState(null);
   const [view, setView] = useState("list"); // list | calendar
@@ -716,10 +716,13 @@ function AppInner() {
                 <div style={styles.subLabel}>달력</div>
               )}
             </div>
-            <button onClick={() => setModal({ mode: "backup" })} style={styles.headerBackupBtn} aria-label="백업">
-              <ShieldCheck size={18} color="#5B6470" />
-              {backupOverdue && <span style={styles.headerBackupDot} />}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button onClick={onSwitchMode} style={styles.modeSwitchBtn}>일상 모드</button>
+              <button onClick={() => setModal({ mode: "backup" })} style={styles.headerBackupBtn} aria-label="백업">
+                <ShieldCheck size={18} color="#5B6470" />
+                {backupOverdue && <span style={styles.headerBackupDot} />}
+              </button>
+            </div>
           </div>
           <div style={styles.tabRow}>
             <button onClick={() => setView("list")} style={{ ...styles.tabBtn, ...(view === "list" ? styles.tabBtnActive : {}) }}>
@@ -2434,6 +2437,7 @@ const styles = {
   header: { padding: "20px 20px 14px", background: "#FFFFFF", borderBottom: "1px solid #EBEEF0" },
   headerTopRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between" },
   headerBackupBtn: { position: "relative", background: "#F0F2F4", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  modeSwitchBtn: { background: "#F0F2F4", border: "none", borderRadius: 18, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#5B6470", flexShrink: 0 },
   headerBackupDot: { position: "absolute", top: 4, right: 5, width: 8, height: 8, borderRadius: "50%", background: "#DC5B45", border: "1.5px solid #fff" },
   dateBig: { fontSize: 21, fontWeight: 700, color: "#1F2937" },
   subLabel: { fontSize: 12.5, color: "#8A93A0", marginTop: 3, marginBottom: 16 },
@@ -2592,10 +2596,146 @@ const styles = {
   doneBtn: { background: "#0D9488", color: "#fff", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 14.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" },
 };
 
+// ---------- 일상 모드 (단순 할 일 목록, 업무 모드와 완전히 분리된 데이터) ----------
+const DAILY_KEY = "moved-app:daily-items";
+
+function DailyApp({ onSwitchMode }) {
+  const [items, setItems] = useState(null);
+  const [text, setText] = useState("");
+  const [date, setDate] = useState("");
+  const itemsRef = useRef(null);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await storage.get(DAILY_KEY);
+        setItems(res ? JSON.parse(res.value) : []);
+      } catch {
+        setItems([]);
+      }
+    })();
+  }, []);
+
+  const persist = (next) => {
+    setItems(next);
+    storage.set(DAILY_KEY, JSON.stringify(next)).catch(() => {});
+  };
+
+  const addItem = () => {
+    if (!text.trim()) return;
+    persist([...(itemsRef.current || []), { id: uid(), text: text.trim(), date: date || null, done: false, createdAt: Date.now() }]);
+    setText("");
+    setDate("");
+  };
+
+  const toggleDone = (id) => {
+    persist((itemsRef.current || []).map((it) => (it.id === id ? { ...it, done: !it.done } : it)));
+  };
+
+  const removeItem = (id) => {
+    if (!window.confirm("삭제할까요?")) return;
+    persist((itemsRef.current || []).filter((it) => it.id !== id));
+  };
+
+  if (items === null) {
+    return <div style={dailyStyles.page}>불러오는 중...</div>;
+  }
+
+  const sorted = [...items].sort((a, b) => {
+    if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+    if (a.date && b.date) return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+    if (a.date && !b.date) return -1;
+    if (!a.date && b.date) return 1;
+    return a.createdAt - b.createdAt;
+  });
+
+  return (
+    <div style={dailyStyles.page}>
+      <style>{`
+        * { box-sizing: border-box; }
+        button { cursor: pointer; font-family: inherit; }
+        input { font-family: inherit; }
+        ::placeholder { color: #A8AFB8; }
+      `}</style>
+      <div style={dailyStyles.header}>
+        <div style={dailyStyles.title}>일상 일정</div>
+        <button onClick={onSwitchMode} style={dailyStyles.switchBtn}>업무 모드</button>
+      </div>
+
+      <div style={dailyStyles.addBox}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") addItem();
+          }}
+          placeholder="할 일을 입력하세요"
+          style={dailyStyles.addInput}
+        />
+        <div style={dailyStyles.addRow2}>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={dailyStyles.dateInput} />
+          <button onClick={addItem} style={dailyStyles.addBtn}>
+            <Plus size={16} color="#fff" style={{ marginRight: 4 }} />
+            추가
+          </button>
+        </div>
+      </div>
+
+      <div style={dailyStyles.list}>
+        {sorted.length === 0 && <div style={dailyStyles.empty}>등록된 일상 일정이 없어요.</div>}
+        {sorted.map((it) => (
+          <div key={it.id} style={dailyStyles.row}>
+            <button
+              onClick={() => toggleDone(it.id)}
+              style={{ ...dailyStyles.checkCircle, background: it.done ? "#0D9488" : "transparent", borderColor: it.done ? "#0D9488" : "#D7DCE1" }}
+              aria-label="완료 처리"
+            >
+              <Check size={13} color={it.done ? "#fff" : "transparent"} />
+            </button>
+            <div style={dailyStyles.textWrap}>
+              <div style={{ ...dailyStyles.text, textDecoration: it.done ? "line-through" : "none", color: it.done ? "#9AA3AF" : "#1F2937" }}>
+                {it.text}
+              </div>
+              {it.date && <div style={dailyStyles.dateLabel}>{it.date}</div>}
+            </div>
+            <button onClick={() => removeItem(it.id)} style={dailyStyles.deleteBtn} aria-label="삭제">
+              <Trash2 size={14} color="#DC5B45" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const dailyStyles = {
+  page: { minHeight: "100vh", background: "#F7F8FA", padding: "20px 16px 40px" },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 },
+  title: { fontSize: 20, fontWeight: 800, color: "#1F2937" },
+  switchBtn: { background: "#F0F2F4", border: "none", borderRadius: 18, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#5B6470" },
+  addBox: { background: "#fff", borderRadius: 14, padding: 14, boxShadow: "0 1px 3px rgba(15,23,42,0.06)", marginBottom: 18 },
+  addInput: { width: "100%", padding: "11px 12px", fontSize: 15, borderRadius: 10, border: "1px solid #E3E6EA", outline: "none", marginBottom: 10 },
+  addRow2: { display: "flex", gap: 8 },
+  dateInput: { flex: 1, padding: "9px 10px", fontSize: 13, borderRadius: 10, border: "1px solid #E3E6EA", outline: "none", color: "#5B6470" },
+  addBtn: { display: "flex", alignItems: "center", justifyContent: "center", background: "#0D9488", color: "#fff", border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 14, fontWeight: 700, flexShrink: 0 },
+  list: { display: "flex", flexDirection: "column", gap: 8 },
+  empty: { textAlign: "center", color: "#A8AFB8", fontSize: 13.5, padding: "30px 0" },
+  row: { display: "flex", alignItems: "center", gap: 10, background: "#fff", borderRadius: 14, padding: "12px 14px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)" },
+  checkCircle: { width: 24, height: 24, borderRadius: "50%", border: "2px solid #D7DCE1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  textWrap: { flex: 1, minWidth: 0 },
+  text: { fontSize: 15, fontWeight: 600, wordBreak: "break-word" },
+  dateLabel: { fontSize: 12, color: "#9AA3AF", marginTop: 2 },
+  deleteBtn: { background: "#FBEAE7", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+};
+
 // ---------- 로그인 게이트 (비밀번호 하나로 잠금) ----------
 const APP_PASSWORD = "1114!";
 const AUTH_KEY = "app_auth"; // localStorage: 로그인 유지
 const AUTH_SESSION_KEY = "app_auth_session"; // sessionStorage: 이번 방문만
+const MODE_KEY = "moved-app:app-mode"; // "work" | "daily"
 
 function LoginGate() {
   const [unlocked, setUnlocked] = useState(() => {
@@ -2608,6 +2748,22 @@ function LoginGate() {
   const [pw, setPw] = useState("");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState(false);
+  const [mode, setMode] = useState(() => {
+    try {
+      return localStorage.getItem(MODE_KEY) === "daily" ? "daily" : "work";
+    } catch {
+      return "work";
+    }
+  });
+
+  const switchMode = (m) => {
+    setMode(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      // 저장 실패해도 이번 세션 내에서는 전환된 채로 둠
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -2625,7 +2781,13 @@ function LoginGate() {
     }
   };
 
-  if (unlocked) return <AppInner />;
+  if (unlocked) {
+    return mode === "daily" ? (
+      <DailyApp onSwitchMode={() => switchMode("work")} />
+    ) : (
+      <AppInner onSwitchMode={() => switchMode("daily")} />
+    );
+  }
 
   return (
     <div style={loginStyles.wrap}>
